@@ -7,6 +7,8 @@ used for both batch processing and streaming inference.
 
 from __future__ import annotations
 
+import warnings
+
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -143,13 +145,64 @@ def apply_feature_pipeline(
     else:
         df_features = df.copy()
 
-    # Apply custom transformers first (these modify dataframe in place)
-    custom_pipeline = pipeline.named_steps["custom_features"]
-    df_with_custom = custom_pipeline.transform(df_features)
+    # Ensure required columns exist for custom transformers
+    required_columns = ["tenure", "MonthlyCharges", "TotalCharges"]
+    missing_columns = [col for col in required_columns if col not in df_features.columns]
+    if missing_columns:
+        raise ValueError(
+            f"Required columns missing from dataframe: {missing_columns}. "
+            f"Available columns: {list(df_features.columns)}"
+        )
 
-    # Apply preprocessor (this returns numpy array)
-    preprocessor = pipeline.named_steps["preprocessor"]
-    transformed = preprocessor.transform(df_with_custom)
+    # Apply custom transformers first (these modify dataframe in place)
+    # Use pipeline's internal _transform method or access steps directly
+    # to avoid FutureWarning about accessing named_steps before fitting check
+    
+    # Suppress FutureWarning globally for this section since we know pipeline is fitted
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn.pipeline")
+        
+        # Access steps using steps_ attribute (set after fitting) to avoid property access
+        # that triggers the fitted check
+        if hasattr(pipeline, "steps_"):
+            # Pipeline is fitted, use steps_ directly
+            steps_list = pipeline.steps_
+        elif hasattr(pipeline, "_sklearn_fitted") and pipeline._sklearn_fitted:
+            # Alternative check for fitted state
+            steps_list = pipeline.steps
+        else:
+            # Last resort: try to access named_steps with warning suppressed
+            try:
+                steps_dict = {name: step for name, step in pipeline.named_steps.items()}
+                custom_pipeline = steps_dict["custom_features"]
+                preprocessor = steps_dict["preprocessor"]
+            except (AttributeError, KeyError):
+                raise ValueError("Pipeline is not fitted. Call pipeline.fit() first.")
+            else:
+                # Successfully got steps from named_steps
+                df_with_custom = custom_pipeline.transform(df_features)
+                transformed = preprocessor.transform(df_with_custom)
+                # Convert to DataFrame and return early
+                if isinstance(transformed, pd.DataFrame):
+                    transformed_df = transformed
+                else:
+                    if hasattr(preprocessor, "get_feature_names_out"):
+                        feature_names = preprocessor.get_feature_names_out()
+                    else:
+                        feature_names = [f"feature_{i}" for i in range(transformed.shape[1])]
+                    transformed_df = pd.DataFrame(transformed, columns=feature_names, index=df_features.index)
+                return transformed_df, target
+        
+        # Convert steps_list to dict
+        steps_dict = dict(steps_list)
+        custom_pipeline = steps_dict["custom_features"]
+        preprocessor = steps_dict["preprocessor"]
+        
+        # Transform using custom pipeline
+        df_with_custom = custom_pipeline.transform(df_features)
+        
+        # Transform using preprocessor
+        transformed = preprocessor.transform(df_with_custom)
 
     # Convert to DataFrame
     if isinstance(transformed, pd.DataFrame):
