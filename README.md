@@ -34,7 +34,7 @@ Work-in-progress churn prediction pipeline I’m building on the Telco Customer 
 | 0 | Repo scaffolding, docs, tooling |  Completed |
 | 1 | Data intake, validation, EDA |  Completed (28 Nov 2025) |
 | 2 | Feature engineering, feature store | Completed |
-| 3 | Modeling, tuning, explainability | Pending |
+| 3 | Modeling, tuning, explainability | Completed |
 | 4 | API, streaming pipeline | Pending |
 | 5 | Monitoring, retraining automation | Pending |
 | 6 | Business insights, packaging | Pending |
