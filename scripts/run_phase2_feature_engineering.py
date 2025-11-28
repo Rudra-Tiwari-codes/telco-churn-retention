@@ -71,7 +71,21 @@ def load_latest_snapshot(processed_dir: Path) -> tuple[pd.DataFrame, Path]:
     if not parquet_files:
         raise FileNotFoundError(f"No parquet files found in {latest_dir}")
 
-    snapshot_path = parquet_files[0]
+    # Prefer telco_churn.parquet or any file that's not target.parquet
+    # target.parquet only contains the target column, not the features
+    snapshot_path = None
+    for pf in parquet_files:
+        if pf.name != "target.parquet":
+            snapshot_path = pf
+            break
+    
+    # If only target.parquet exists, that's an error - we need feature data
+    if snapshot_path is None:
+        raise FileNotFoundError(
+            f"Only target.parquet found in {latest_dir}. "
+            f"Need feature data file (telco_churn.parquet or train.parquet)."
+        )
+
     df = pd.read_parquet(snapshot_path)
 
     return df, snapshot_path
