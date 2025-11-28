@@ -6,7 +6,6 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import Dict
 
 import pandas as pd
 from great_expectations.core.batch import Batch
@@ -47,7 +46,7 @@ def build_validator(df: pd.DataFrame) -> Validator:
     return validator
 
 
-def run_validation(df: pd.DataFrame, output_path: Path) -> Dict:
+def run_validation(df: pd.DataFrame, output_path: Path) -> dict:
     validator = build_validator(df)
     results = validator.validate()
     output_path.parent.mkdir(parents=True, exist_ok=True)
