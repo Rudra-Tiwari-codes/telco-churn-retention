@@ -7,8 +7,6 @@ used for both batch processing and streaming inference.
 
 from __future__ import annotations
 
-from typing import List
-
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
@@ -23,8 +21,8 @@ from src.features.transformers import (
 
 
 def create_feature_pipeline(
-    numeric_features: List[str] | None = None,
-    categorical_features: List[str] | None = None,
+    numeric_features: list[str] | None = None,
+    categorical_features: list[str] | None = None,
     use_target_encoding: bool = False,
 ) -> Pipeline:
     """Create feature engineering pipeline.
@@ -137,7 +135,10 @@ def apply_feature_pipeline(
     # Separate target if present
     target = None
     if target_column in df.columns:
-        target = df[target_column].map({"Yes": 1, "No": 0}) if target_column == "Churn" else df[target_column]
+        if target_column == "Churn":
+            target = df[target_column].map({"Yes": 1, "No": 0})
+        else:
+            target = df[target_column]
         df_features = df.drop(columns=[target_column])
     else:
         df_features = df.copy()
