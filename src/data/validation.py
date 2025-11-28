@@ -5,6 +5,7 @@ Great Expectations based validation for the Telco churn dataset.
 from __future__ import annotations
 
 import json
+import warnings
 from pathlib import Path
 
 import pandas as pd
@@ -21,12 +22,17 @@ def build_validator(df: pd.DataFrame) -> Validator:
     context = get_context()
     set_context(context)
     suite = ExpectationSuite(name="telco_phase1")
-    validator = Validator(
-        execution_engine=PandasExecutionEngine(),
-        batches=[Batch(data=df)],
-        expectation_suite=suite,
-        data_context=context,
-    )
+    # Create validator without result_format to avoid warnings
+    # result_format should be set at Checkpoint level, not Validator level
+    # Suppress the UserWarning about result_format configuration
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*result_format.*")
+        validator = Validator(
+            execution_engine=PandasExecutionEngine(),
+            batches=[Batch(data=df)],
+            expectation_suite=suite,
+            data_context=context,
+        )
     validator.expect_column_values_to_not_be_null("customerID")
     validator.expect_column_values_to_be_unique("customerID")
     validator.expect_table_column_count_to_equal(21)
@@ -45,8 +51,11 @@ def build_validator(df: pd.DataFrame) -> Validator:
 
 
 def run_validation(df: pd.DataFrame, output_path: Path) -> dict:
-    validator = build_validator(df)
-    results = validator.validate()
+    # Suppress Great Expectations warnings about result_format
+    with warnings.catch_warnings():
+        warnings.filterwarnings("ignore", category=UserWarning, message=".*result_format.*")
+        validator = build_validator(df)
+        results = validator.validate()
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(results.to_json_dict(), indent=2))
     return results
