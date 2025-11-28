@@ -43,7 +43,9 @@ def test_service_count_transformer() -> None:
     assert "service_count" in result.columns
     assert result["service_count"].iloc[0] == 3  # 3 Yes values
     assert result["service_count"].iloc[1] == 3
-    assert result["service_count"].iloc[2] == 2
+    assert (
+        result["service_count"].iloc[2] == 3
+    )  # OnlineSecurity=Yes, DeviceProtection=Yes, StreamingMovies=Yes
 
 
 def test_revenue_signal_transformer() -> None:

@@ -18,7 +18,7 @@ def test_ingestion_config_snapshot_path(tmp_path: Path) -> None:
         snapshot_name="test.parquet",
     )
     snapshot_path = config.snapshot_path()
-    assert snapshot_path.parent == tmp_path
+    assert snapshot_path.parent.parent == tmp_path
     assert snapshot_path.name == "test.parquet"
     assert snapshot_path.parent.name  # timestamp directory exists
 
