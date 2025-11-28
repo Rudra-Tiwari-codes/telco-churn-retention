@@ -4,16 +4,17 @@ from __future__ import annotations
 
 import argparse
 import json
-from pathlib import Path
 import sys
-
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.append(str(PROJECT_ROOT))
+from datetime import datetime, timezone
+from pathlib import Path
 
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(PROJECT_ROOT) not in sys.path:
+    sys.path.append(str(PROJECT_ROOT))
 
 from src.data.ingestion import IngestionConfig, load_raw_dataset, clean_dataset
 from src.features.pipeline import create_feature_pipeline, apply_feature_pipeline
@@ -93,8 +94,6 @@ def create_provenance_log(
     Returns:
         Provenance log dictionary.
     """
-    from datetime import datetime, timezone
-    
     return {
         "input_path": str(input_path),
         "output_path": str(output_path),
@@ -146,7 +145,6 @@ def main() -> None:
     console.print(f"[dim]Features: {list(X_transformed.columns[:10])}...[/dim]")
     
     # Create output directory with timestamp
-    from datetime import datetime, timezone
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
     output_dir = args.output_dir / timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
