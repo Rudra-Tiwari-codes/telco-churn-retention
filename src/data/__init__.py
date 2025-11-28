@@ -13,4 +13,3 @@ __all__ = [
     "run_validation",
     "write_markdown_summary",
 ]
-

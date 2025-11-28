@@ -26,17 +26,17 @@ def create_feature_pipeline(
     use_target_encoding: bool = False,
 ) -> Pipeline:
     """Create feature engineering pipeline.
-    
+
     The pipeline first applies custom transformers to create new features,
     then applies scaling and encoding to all features.
-    
+
     Args:
         numeric_features: List of numeric feature names after custom transformations.
                          If None, will be determined dynamically after custom features are created.
         categorical_features: List of categorical feature names after custom transformations.
                             If None, will be determined dynamically after custom features are created.
         use_target_encoding: Whether to use target encoding for categoricals (not yet implemented).
-        
+
     Returns:
         sklearn Pipeline for feature engineering.
     """
@@ -47,7 +47,7 @@ def create_feature_pipeline(
         "MonthlyCharges",
         "TotalCharges",
     ]
-    
+
     base_categorical_features = [
         "gender",
         "Partner",
@@ -65,7 +65,7 @@ def create_feature_pipeline(
         "PaperlessBilling",
         "PaymentMethod",
     ]
-    
+
     # Features created by custom transformers
     engineered_numeric_features = [
         "service_count",
@@ -74,7 +74,7 @@ def create_feature_pipeline(
         "charge_increase_flag",
         "clv_approximation",
     ]
-    
+
     engineered_categorical_features = [
         "tenure_bucket",
     ]
@@ -92,7 +92,7 @@ def create_feature_pipeline(
     # Use provided feature lists or combine base + engineered
     if numeric_features is None:
         numeric_features = base_numeric_features + engineered_numeric_features
-    
+
     if categorical_features is None:
         categorical_features = base_categorical_features + engineered_categorical_features
 
@@ -123,12 +123,12 @@ def apply_feature_pipeline(
     target_column: str = "Churn",
 ) -> tuple[pd.DataFrame, pd.Series | None]:
     """Apply feature pipeline to dataframe.
-    
+
     Args:
         df: Input dataframe.
         pipeline: Fitted feature pipeline.
         target_column: Name of target column (if present).
-        
+
     Returns:
         Tuple of (transformed_features_df, target_series).
     """
@@ -161,8 +161,7 @@ def apply_feature_pipeline(
         else:
             # Fallback: generate names based on shape
             feature_names = [f"feature_{i}" for i in range(transformed.shape[1])]
-        
+
         transformed_df = pd.DataFrame(transformed, columns=feature_names, index=df_features.index)
 
     return transformed_df, target
-

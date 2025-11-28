@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict, dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -57,7 +57,7 @@ class FeatureSetMetadata:
     @classmethod
     def load(cls, path: Path) -> FeatureSetMetadata:
         """Load metadata from JSON file."""
-        with open(path, "r") as f:
+        with open(path) as f:
             data = json.load(f)
         return cls(**data)
 
@@ -67,7 +67,7 @@ class FeatureStore:
 
     def __init__(self, metadata_dir: Path) -> None:
         """Initialize feature store.
-        
+
         Args:
             metadata_dir: Directory to store feature metadata files.
         """
@@ -83,19 +83,19 @@ class FeatureStore:
         version: str | None = None,
     ) -> FeatureSetMetadata:
         """Register a feature set with metadata.
-        
+
         Args:
             feature_set_name: Name of the feature set.
             df: DataFrame containing the features.
             feature_definitions: Optional list of feature metadata. If None, auto-generated.
             transformer_config: Optional configuration used to generate features.
             version: Optional version string. If None, uses timestamp.
-            
+
         Returns:
             FeatureSetMetadata object.
         """
         if version is None:
-            version = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+            version = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
 
         # Auto-generate feature definitions if not provided
         if feature_definitions is None:
@@ -112,7 +112,7 @@ class FeatureStore:
         metadata = FeatureSetMetadata(
             feature_set_name=feature_set_name,
             features=feature_definitions,
-            created_at=datetime.now(timezone.utc).isoformat(),
+            created_at=datetime.now(UTC).isoformat(),
             version=version,
             column_order=list(df.columns),
             transformer_config=transformer_config,
@@ -128,11 +128,11 @@ class FeatureStore:
         self, feature_set_name: str, version: str | None = None
     ) -> FeatureSetMetadata | None:
         """Get metadata for a feature set.
-        
+
         Args:
             feature_set_name: Name of the feature set.
             version: Optional version. If None, returns latest.
-            
+
         Returns:
             FeatureSetMetadata or None if not found.
         """
@@ -159,5 +159,4 @@ class FeatureStore:
             parts = f.stem.rsplit("_", 1)
             if len(parts) == 2:
                 feature_sets.add(parts[0])
-        return sorted(list(feature_sets))
-
+        return sorted(feature_sets)

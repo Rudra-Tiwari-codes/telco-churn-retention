@@ -5,9 +5,8 @@ Utilities for loading the Telco churn dataset and materializing processed snapsh
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
 
@@ -17,10 +16,10 @@ class IngestionConfig:
     raw_path: Path
     processed_dir: Path
     snapshot_name: str = "telco_churn.parquet"
-    snapshot_ts: Optional[str] = None
+    snapshot_ts: str | None = None
 
     def snapshot_path(self) -> Path:
-        ts = self.snapshot_ts or datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+        ts = self.snapshot_ts or datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
         return self.processed_dir / ts / self.snapshot_name
 
 
@@ -52,4 +51,3 @@ def run_ingestion(config: IngestionConfig) -> Path:
     raw_df = load_raw_dataset(config.raw_path)
     cleaned = clean_dataset(raw_df)
     return persist_snapshot(cleaned, config)
-

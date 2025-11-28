@@ -14,7 +14,7 @@ from sklearn.base import BaseEstimator, TransformerMixin
 
 class TenureBucketTransformer(BaseEstimator, TransformerMixin):
     """Transform tenure into categorical buckets.
-    
+
     Creates tenure buckets based on predefined ranges:
     - 0-12: New customers (high churn risk)
     - 13-24: Early customers
@@ -31,7 +31,7 @@ class TenureBucketTransformer(BaseEstimator, TransformerMixin):
         labels: list[str] | None = None,
     ) -> None:
         """Initialize tenure bucket transformer.
-        
+
         Args:
             bins: Bin edges for tenure buckets. Default: [0, 12, 24, 36, 48, 60, 72, 100]
             labels: Labels for each bucket. Default: ["0-12", "13-24", "25-36", "37-48", "49-60", "61-72", "73+"]
@@ -45,10 +45,10 @@ class TenureBucketTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """Transform tenure column into buckets.
-        
+
         Args:
             X: DataFrame with 'tenure' column.
-            
+
         Returns:
             DataFrame with 'tenure_bucket' column added.
         """
@@ -64,7 +64,7 @@ class TenureBucketTransformer(BaseEstimator, TransformerMixin):
 
 class ServiceCountTransformer(BaseEstimator, TransformerMixin):
     """Count the number of add-on services a customer has.
-    
+
     Counts services from: OnlineSecurity, OnlineBackup, DeviceProtection,
     TechSupport, StreamingTV, StreamingMovies.
     """
@@ -86,25 +86,25 @@ class ServiceCountTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """Count add-on services.
-        
+
         Args:
             X: DataFrame with service columns.
-            
+
         Returns:
             DataFrame with 'service_count' column added.
         """
         X = X.copy()
-        
+
         # Count services (excluding "No" and "No internet service")
         service_mask = X[self.service_columns].isin(["Yes"])
         X["service_count"] = service_mask.sum(axis=1)
-        
+
         return X
 
 
 class RevenueSignalTransformer(BaseEstimator, TransformerMixin):
     """Create revenue-related signal features.
-    
+
     Creates:
     - charges_ratio: MonthlyCharges / TotalCharges (when TotalCharges > 0)
     - avg_monthly_charge: TotalCharges / tenure (when tenure > 0)
@@ -117,15 +117,15 @@ class RevenueSignalTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """Create revenue signal features.
-        
+
         Args:
             X: DataFrame with 'MonthlyCharges', 'TotalCharges', and 'tenure' columns.
-            
+
         Returns:
             DataFrame with revenue signal columns added.
         """
         X = X.copy()
-        
+
         # Charges ratio: MonthlyCharges / TotalCharges
         # Only compute when TotalCharges > 0 to avoid division by zero
         X["charges_ratio"] = np.where(
@@ -133,7 +133,7 @@ class RevenueSignalTransformer(BaseEstimator, TransformerMixin):
             X["MonthlyCharges"] / X["TotalCharges"],
             np.nan,
         )
-        
+
         # Average monthly charge: TotalCharges / tenure
         # Only compute when tenure > 0
         X["avg_monthly_charge"] = np.where(
@@ -141,28 +141,26 @@ class RevenueSignalTransformer(BaseEstimator, TransformerMixin):
             X["TotalCharges"] / X["tenure"],
             np.nan,
         )
-        
+
         # Charge increase flag: MonthlyCharges > avg_monthly_charge
-        X["charge_increase_flag"] = (
-            X["MonthlyCharges"] > X["avg_monthly_charge"]
-        ).astype(int)
-        
+        X["charge_increase_flag"] = (X["MonthlyCharges"] > X["avg_monthly_charge"]).astype(int)
+
         # Fill NaN values with 0 for flags
         X["charge_increase_flag"] = X["charge_increase_flag"].fillna(0)
-        
+
         return X
 
 
 class CustomerLifetimeValueTransformer(BaseEstimator, TransformerMixin):
     """Approximate customer lifetime value (CLV).
-    
+
     Creates CLV proxy as: TotalCharges + (MonthlyCharges * projected_months)
     where projected_months is based on contract type or a default value.
     """
 
     def __init__(self, default_projection_months: int = 12) -> None:
         """Initialize CLV transformer.
-        
+
         Args:
             default_projection_months: Default months to project for month-to-month contracts.
         """
@@ -179,24 +177,23 @@ class CustomerLifetimeValueTransformer(BaseEstimator, TransformerMixin):
 
     def transform(self, X: pd.DataFrame) -> pd.DataFrame:
         """Create CLV approximation.
-        
+
         Args:
             X: DataFrame with 'TotalCharges', 'MonthlyCharges', and 'Contract' columns.
-            
+
         Returns:
             DataFrame with 'clv_approximation' column added.
         """
         X = X.copy()
-        
+
         # Get projection months based on contract
-        projection_months = X["Contract"].map(self.contract_projections).fillna(
-            self.default_projection_months
+        projection_months = (
+            X["Contract"].map(self.contract_projections).fillna(self.default_projection_months)
         )
-        
+
         # CLV = TotalCharges + (MonthlyCharges * projected_months)
         X["clv_approximation"] = X["TotalCharges"].fillna(0) + (
             X["MonthlyCharges"] * projection_months
         )
-        
-        return X
 
+        return X

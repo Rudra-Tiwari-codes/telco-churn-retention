@@ -39,9 +39,7 @@ def build_validator(df: pd.DataFrame) -> Validator:
         regex_list=[r"^[0-9A-Za-z\-]+$"],
     )
     validator.expect_column_values_to_not_be_null("TotalCharges", mostly=0.995)
-    validator.expect_column_values_to_be_between(
-        "MonthlyCharges", min_value=0, max_value=200
-    )
+    validator.expect_column_values_to_be_between("MonthlyCharges", min_value=0, max_value=200)
     validator.expect_column_values_to_be_between("tenure", min_value=0, max_value=100)
     return validator
 
@@ -52,4 +50,3 @@ def run_validation(df: pd.DataFrame, output_path: Path) -> dict:
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output_path.write_text(json.dumps(results.to_json_dict(), indent=2))
     return results
-

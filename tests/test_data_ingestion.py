@@ -42,4 +42,3 @@ def test_load_raw_dataset_nonexistent() -> None:
     """Test that loading non-existent file raises FileNotFoundError."""
     with pytest.raises(FileNotFoundError):
         load_raw_dataset(Path("nonexistent_file.csv"))
-

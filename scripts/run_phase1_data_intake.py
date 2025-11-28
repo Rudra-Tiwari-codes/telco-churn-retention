@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import argparse
-from pathlib import Path
 import sys
+from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
@@ -59,9 +59,7 @@ def main() -> None:
 
     df = pd.read_parquet(snapshot_path)
     run_validation(df, args.validation_report)
-    console.print(
-        f"[green]Validation report stored at {args.validation_report}[/green]"
-    )
+    console.print(f"[green]Validation report stored at {args.validation_report}[/green]")
 
     write_markdown_summary(df, args.summary_path)
     console.print(f"[green]EDA summary written to {args.summary_path}[/green]")
@@ -69,4 +67,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

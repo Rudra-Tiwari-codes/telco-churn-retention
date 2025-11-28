@@ -43,4 +43,3 @@ def test_categorical_cardinality() -> None:
     result = categorical_cardinality(df)
     assert "cat_col" in result
     assert "3" in result
-
