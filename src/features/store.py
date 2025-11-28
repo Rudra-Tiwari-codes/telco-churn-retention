@@ -12,7 +12,7 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import pandas as pd
 
@@ -26,9 +26,9 @@ class FeatureMetadata:
     description: str
     owner: str = "data-team"
     version: str = "1.0"
-    tags: List[str] | None = None
+    tags: list[str] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
 
@@ -38,13 +38,13 @@ class FeatureSetMetadata:
     """Metadata for a set of features."""
 
     feature_set_name: str
-    features: List[FeatureMetadata]
+    features: list[FeatureMetadata]
     created_at: str
     version: str
-    column_order: List[str]
-    transformer_config: Dict[str, Any] | None = None
+    column_order: list[str]
+    transformer_config: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return asdict(self)
 
@@ -78,8 +78,8 @@ class FeatureStore:
         self,
         feature_set_name: str,
         df: pd.DataFrame,
-        feature_definitions: List[FeatureMetadata] | None = None,
-        transformer_config: Dict[str, Any] | None = None,
+        feature_definitions: list[FeatureMetadata] | None = None,
+        transformer_config: dict[str, Any] | None = None,
         version: str | None = None,
     ) -> FeatureSetMetadata:
         """Register a feature set with metadata.
@@ -150,7 +150,7 @@ class FeatureStore:
 
         return None
 
-    def list_feature_sets(self) -> List[str]:
+    def list_feature_sets(self) -> list[str]:
         """List all registered feature set names."""
         json_files = list(self.metadata_dir.glob("*.json"))
         feature_sets = set()
