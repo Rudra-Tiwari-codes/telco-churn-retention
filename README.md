@@ -23,10 +23,45 @@ Work-in-progress churn prediction pipeline I’m building on the Telco Customer 
 - `tests/`: unit and integration tests.
 
 ### Getting Started
-1. Create and activate a Python 3.11+ environment.
-2. Install dependencies once `pyproject.toml`/`poetry.lock` are committed.
-3. Download the Telco dataset into `data/raw/` (refer to `docs/roadmap.md` for phase instructions).
-4. Run `make qa` (to be defined) for linting, typing, and tests before committing.
+
+#### Windows Setup
+
+1. **Create Virtual Environment** (choose one method):
+   - **Recommended**: Run `.\setup_venv.ps1` in PowerShell
+   - **Alternative**: `python -m venv venv`
+
+2. **Activate Virtual Environment** (choose one method):
+   - **PowerShell**: `.\activate_venv.ps1` or `.\venv\Scripts\Activate.ps1`
+   - **Command Prompt**: `activate_venv.bat` or `venv\Scripts\activate.bat`
+   
+   **If you get execution policy errors**, run:
+   ```powershell
+   Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser
+   ```
+
+3. **Install Dependencies**:
+   ```bash
+   pip install -e .
+   pip install -e ".[eda,dev]"  # For development with notebooks
+   ```
+
+4. Download the Telco dataset into `data/raw/` (refer to `docs/roadmap.md` for phase instructions).
+
+5. Run `make qa` (to be defined) for linting, typing, and tests before committing.
+
+#### Linux/macOS Setup
+
+1. Create and activate a Python 3.11+ environment:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate
+   ```
+
+2. Install dependencies:
+   ```bash
+   pip install -e .
+   pip install -e ".[eda,dev]"  # For development with notebooks
+   ```
 
 ### Phase Tracking
 | Phase | Scope | Status |
@@ -46,4 +81,8 @@ Work-in-progress churn prediction pipeline I’m building on the Telco Customer 
 - Tag issues/tasks inside commit bodies for traceability.
 
 Refer to `docs/roadmap.md` for the detailed execution plan.
+
+### Troubleshooting
+
+If you encounter issues creating or activating the virtual environment on Windows, see `VENV_TROUBLESHOOTING.md` for common solutions.
 
