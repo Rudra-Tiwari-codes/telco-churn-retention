@@ -214,7 +214,9 @@ class ModelEvaluator:
             save_path: Optional path to save figure.
         """
         y_pred_proba = self.model.predict_proba(X)[:, 1]
-        y_pred = (y_pred_proba >= threshold).astype(int)
+        # Ensure threshold is a float
+        threshold_val = float(threshold) if not isinstance(threshold, (int, float)) else threshold
+        y_pred = (y_pred_proba >= threshold_val).astype(int)
         cm = confusion_matrix(y, y_pred)
 
         plt.figure(figsize=(8, 6))
@@ -283,7 +285,7 @@ class ModelEvaluator:
             X_test, y_test, output_dir / f"{model_name}_calibration_curve.png"
         )
         self.plot_confusion_matrix(
-            X_test, y_test, output_dir / f"{model_name}_confusion_matrix.png"
+            X_test, y_test, threshold=0.5, save_path=output_dir / f"{model_name}_confusion_matrix.png"
         )
 
         # Generate classification report
