@@ -11,6 +11,7 @@ import warnings
 
 import pandas as pd
 from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
 
@@ -100,9 +101,15 @@ def create_feature_pipeline(
 
     # Create preprocessing pipeline
     # Note: ColumnTransformer will be applied to data after custom features are created
+    # Add imputer for numeric features to handle NaN values
+    numeric_pipeline = Pipeline([
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler()),
+    ])
+    
     preprocessor = ColumnTransformer(
         transformers=[
-            ("num", StandardScaler(), numeric_features),
+            ("num", numeric_pipeline, numeric_features),
             ("cat", OneHotEncoder(drop="first", sparse_output=False), categorical_features),
         ],
         remainder="drop",  # Drop any remaining columns not explicitly handled
