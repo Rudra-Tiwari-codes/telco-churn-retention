@@ -78,7 +78,7 @@ def load_latest_snapshot(processed_dir: Path) -> tuple[pd.DataFrame, Path]:
         if pf.name != "target.parquet":
             snapshot_path = pf
             break
-    
+
     # If only target.parquet exists, that's an error - we need feature data
     if snapshot_path is None:
         raise FileNotFoundError(

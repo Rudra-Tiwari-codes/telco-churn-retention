@@ -157,11 +157,11 @@ def apply_feature_pipeline(
     # Apply custom transformers first (these modify dataframe in place)
     # Use pipeline's internal _transform method or access steps directly
     # to avoid FutureWarning about accessing named_steps before fitting check
-    
+
     # Suppress FutureWarning globally for this section since we know pipeline is fitted
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn.pipeline")
-        
+
         # Access steps using steps_ attribute (set after fitting) to avoid property access
         # that triggers the fitted check
         if hasattr(pipeline, "steps_"):
@@ -173,11 +173,11 @@ def apply_feature_pipeline(
         else:
             # Last resort: try to access named_steps with warning suppressed
             try:
-                steps_dict = {name: step for name, step in pipeline.named_steps.items()}
+                steps_dict = dict(pipeline.named_steps.items())
                 custom_pipeline = steps_dict["custom_features"]
                 preprocessor = steps_dict["preprocessor"]
-            except (AttributeError, KeyError):
-                raise ValueError("Pipeline is not fitted. Call pipeline.fit() first.")
+            except (AttributeError, KeyError) as err:
+                raise ValueError("Pipeline is not fitted. Call pipeline.fit() first.") from err
             else:
                 # Successfully got steps from named_steps
                 df_with_custom = custom_pipeline.transform(df_features)
@@ -190,17 +190,19 @@ def apply_feature_pipeline(
                         feature_names = preprocessor.get_feature_names_out()
                     else:
                         feature_names = [f"feature_{i}" for i in range(transformed.shape[1])]
-                    transformed_df = pd.DataFrame(transformed, columns=feature_names, index=df_features.index)
+                    transformed_df = pd.DataFrame(
+                        transformed, columns=feature_names, index=df_features.index
+                    )
                 return transformed_df, target
-        
+
         # Convert steps_list to dict
         steps_dict = dict(steps_list)
         custom_pipeline = steps_dict["custom_features"]
         preprocessor = steps_dict["preprocessor"]
-        
+
         # Transform using custom pipeline
         df_with_custom = custom_pipeline.transform(df_features)
-        
+
         # Transform using preprocessor
         transformed = preprocessor.transform(df_with_custom)
 

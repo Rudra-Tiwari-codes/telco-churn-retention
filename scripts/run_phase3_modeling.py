@@ -9,7 +9,6 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import mlflow
-import numpy as np
 import pandas as pd
 from rich.console import Console
 from rich.table import Table
@@ -19,7 +18,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-from src.features.pipeline import apply_feature_pipeline, create_feature_pipeline
 from src.models.evaluation import ModelEvaluator
 from src.models.explainability import ModelExplainer
 from src.models.trainer import ModelTrainer, TrainingConfig
@@ -284,7 +282,9 @@ def main() -> None:
 
     # Find best model
     best_model = max(results, key=lambda x: x["roc_auc"])
-    console.print(f"\n[bold green]Best Model: {best_model['model']} (ROC-AUC: {best_model['roc_auc']:.4f})[/bold green]")
+    console.print(
+        f"\n[bold green]Best Model: {best_model['model']} (ROC-AUC: {best_model['roc_auc']:.4f})[/bold green]"
+    )
 
     # Save summary
     summary_path = output_dir / "model_summary.json"
@@ -303,4 +303,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
