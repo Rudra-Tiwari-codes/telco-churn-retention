@@ -163,6 +163,13 @@ def main() -> None:
     output_dir = args.output_dir / timestamp
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    # Save feature pipeline
+    import joblib
+
+    pipeline_path = output_dir / "feature_pipeline.pkl"
+    joblib.dump(pipeline, pipeline_path)
+    console.print(f"[green]Saved feature pipeline to: {pipeline_path}[/green]")
+
     # Save processed features
     output_path = output_dir / "train.parquet"
     X_transformed.to_parquet(output_path, index=False)
