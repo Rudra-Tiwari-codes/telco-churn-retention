@@ -143,10 +143,13 @@ class RevenueSignalTransformer(BaseEstimator, TransformerMixin):
         )
 
         # Charge increase flag: MonthlyCharges > avg_monthly_charge
-        X["charge_increase_flag"] = (X["MonthlyCharges"] > X["avg_monthly_charge"]).astype(int)
-
-        # Fill NaN values with 0 for flags
-        X["charge_increase_flag"] = X["charge_increase_flag"].fillna(0)
+        # Handle NaN values: if avg_monthly_charge is NaN, set flag to 0
+        # Fill NaN in avg_monthly_charge with 0 for comparison (or use a large value)
+        avg_monthly_charge_filled = X["avg_monthly_charge"].fillna(0)
+        X["charge_increase_flag"] = (X["MonthlyCharges"] > avg_monthly_charge_filled).astype(int)
+        
+        # If avg_monthly_charge was NaN, set flag to 0
+        X.loc[X["avg_monthly_charge"].isna(), "charge_increase_flag"] = 0
 
         return X
 
