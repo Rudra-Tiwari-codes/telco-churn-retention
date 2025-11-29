@@ -18,6 +18,7 @@ build/
 
 data/raw/*
 data/processed/*
+data/feature_metadata/*
 !data/raw/.gitkeep
 !data/processed/.gitkeep
 
@@ -26,6 +27,9 @@ data/processed/*
 
 mlruns/
 logs/
+models/
+htmlcov/
 
 notebooks/.ipynb_checkpoints/
+notebooks/mlruns/
 
