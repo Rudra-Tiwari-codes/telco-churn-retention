@@ -15,8 +15,8 @@
     "test_size": 0.2,
     "use_smote": false,
     "calibrate": false,
-    "n_trials": 50,
-    "timeout": 3600
+    "n_trials": 20,
+    "timeout": 1800
   },
   "lightgbm": {
     "model_type": "lightgbm",
@@ -25,8 +25,8 @@
     "test_size": 0.2,
     "use_smote": false,
     "calibrate": false,
-    "n_trials": 50,
-    "timeout": 3600
+    "n_trials": 20,
+    "timeout": 1800
   }
 }
 
