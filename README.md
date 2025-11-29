@@ -47,7 +47,16 @@ Work-in-progress churn prediction pipeline I’m building on the Telco Customer 
 
 4. Download the Telco dataset into `data/raw/` (refer to `docs/roadmap.md` for phase instructions).
 
-5. Run `make qa` (to be defined) for linting, typing, and tests before committing.
+5. Run `make qa` for linting, typing, and tests before committing.
+
+6. **Start API Service** (after completing Phases 1-3):
+   ```bash
+   make phase4
+   # Or: python scripts/run_phase4_api.py
+   ```
+   API will be available at http://localhost:8000
+   - Swagger UI: http://localhost:8000/docs
+   - Health check: http://localhost:8000/health
 
 #### Linux/macOS Setup
 
@@ -70,7 +79,7 @@ Work-in-progress churn prediction pipeline I’m building on the Telco Customer 
 | 1 | Data intake, validation, EDA |  Completed (28 Nov 2025) |
 | 2 | Feature engineering, feature store | Completed |
 | 3 | Modeling, tuning, explainability | Completed |
-| 4 | API, streaming pipeline | Pending |
+| 4 | API, streaming pipeline | Completed |
 | 5 | Monitoring, retraining automation | Pending |
 | 6 | Business insights, packaging | Pending |
 
