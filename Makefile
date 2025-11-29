@@ -44,6 +44,15 @@ phase1: ## Run Phase 1 data intake workflow
 phase2: ## Run Phase 2 feature engineering workflow
 	python scripts/run_phase2_feature_engineering.py --use-latest
 
+phase3: ## Run Phase 3 modeling workflow
+	python scripts/run_phase3_modeling.py --use-latest
+
+phase4: ## Run Phase 4 API service
+	python scripts/run_phase4_api.py
+
+phase4-streaming: ## Run Phase 4 streaming pipeline (simulator)
+	python scripts/run_phase4_streaming.py --simulate
+
 pre-commit: ## Run pre-commit hooks on all files
 	pre-commit run --all-files
 
