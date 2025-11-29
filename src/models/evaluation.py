@@ -12,6 +12,7 @@ import numpy as np
 from sklearn.calibration import calibration_curve
 from sklearn.metrics import (
     accuracy_score,
+    auc,
     classification_report,
     confusion_matrix,
     f1_score,
@@ -91,7 +92,7 @@ class ModelEvaluator:
 
         # PR-AUC
         precision_curve, recall_curve, _ = precision_recall_curve(y, y_pred_proba)
-        pr_auc = np.trapz(precision_curve, recall_curve)
+        pr_auc = auc(recall_curve, precision_curve)
 
         # Precision/Recall at top-k
         precision_at_top_k = {}
@@ -157,7 +158,7 @@ class ModelEvaluator:
         """
         y_pred_proba = self.model.predict_proba(X)[:, 1]
         precision, recall, _ = precision_recall_curve(y, y_pred_proba)
-        pr_auc = np.trapz(precision, recall)
+        pr_auc = auc(recall, precision)
 
         plt.figure(figsize=(8, 6))
         plt.plot(recall, precision, label=f"PR Curve (AUC = {pr_auc:.3f})")

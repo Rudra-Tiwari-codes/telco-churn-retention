@@ -69,11 +69,17 @@ class ModelExplainer:
             if isinstance(shap_values, list):
                 shap_values = shap_values[1]
 
+        # Extract base value safely
+        if isinstance(self.explainer.expected_value, (list, np.ndarray)):
+            base_value = float(self.explainer.expected_value[1] if len(self.explainer.expected_value) > 1 else self.explainer.expected_value[0])
+        else:
+            base_value = float(self.explainer.expected_value)
+        
         # Create explanation dict
         explanation = {
             "feature_names": self.feature_names or [f"feature_{i}" for i in range(len(X_instance))],
             "shap_values": shap_values.flatten().tolist(),
-            "base_value": float(self.explainer.expected_value[1] if isinstance(self.explainer.expected_value, (list, np.ndarray)) else self.explainer.expected_value),
+            "base_value": base_value,
             "prediction": float(self.model.predict_proba(X_instance.reshape(1, -1))[0, 1]),
         }
 
@@ -99,9 +105,24 @@ class ModelExplainer:
             # For KernelExplainer, use a reasonable number of samples
             if max_evals is None:
                 max_evals = min(100, len(X) * 2)
-            shap_values = self.explainer.shap_values(X, nsamples=max_evals)
-            if isinstance(shap_values, list):
-                shap_values = shap_values[1]
+            try:
+                shap_values = self.explainer.shap_values(X, nsamples=max_evals)
+                if isinstance(shap_values, list):
+                    if len(shap_values) > 1:
+                        shap_values = shap_values[1]  # Positive class
+                    else:
+                        shap_values = shap_values[0]
+            except Exception as e:
+                raise RuntimeError(f"Failed to compute SHAP values: {e}") from e
+
+        # Ensure shap_values is a numpy array with correct shape
+        shap_values = np.asarray(shap_values)
+        if shap_values.ndim == 1:
+            shap_values = shap_values.reshape(1, -1)
+        if shap_values.shape[1] != X.shape[1]:
+            raise ValueError(
+                f"SHAP values shape {shap_values.shape} doesn't match input shape {X.shape}"
+            )
 
         # Calculate feature importance (mean absolute SHAP values)
         feature_importance = np.abs(shap_values).mean(axis=0)
@@ -152,18 +173,15 @@ class ModelExplainer:
         shap_values, _ = self.explain_instance(X_instance)
 
         # Create SHAP Explanation object for waterfall plot
-        if isinstance(self.explainer, shap.TreeExplainer):
+        # Extract expected value safely
+        if isinstance(self.explainer.expected_value, (list, np.ndarray)):
             expected_value = (
-                self.explainer.expected_value[1]
-                if isinstance(self.explainer.expected_value, (list, np.ndarray))
-                else self.explainer.expected_value
+                float(self.explainer.expected_value[1]) 
+                if len(self.explainer.expected_value) > 1 
+                else float(self.explainer.expected_value[0])
             )
         else:
-            expected_value = (
-                self.explainer.expected_value[1]
-                if isinstance(self.explainer.expected_value, (list, np.ndarray))
-                else self.explainer.expected_value
-            )
+            expected_value = float(self.explainer.expected_value)
 
         explanation = shap.Explanation(
             values=shap_values.flatten(),
@@ -194,8 +212,32 @@ class ModelExplainer:
 
         # Get top N features
         feature_names = summary["feature_names"]
-        importance = np.array(summary["feature_importance"])
+        importance = np.array(summary["feature_importance"]).flatten()
+        
+        # Validate data
+        if len(feature_names) == 0:
+            raise ValueError("No feature names available for plotting")
+        if len(importance) == 0:
+            raise ValueError("No feature importance values available")
+        if len(feature_names) != len(importance):
+            raise ValueError(f"Feature names length ({len(feature_names)}) doesn't match importance length ({len(importance)})")
+        
+        # Ensure top_n doesn't exceed available features
+        top_n = min(top_n, len(importance))
+        
         top_indices = np.argsort(importance)[-top_n:][::-1]
+        
+        # Validate indices are within range
+        valid_mask = top_indices < len(feature_names)
+        if not valid_mask.any():
+            raise ValueError("No valid feature indices found for plotting")
+        
+        top_indices = top_indices[valid_mask]
+        
+        # Ensure indices are valid integers
+        top_indices = [int(i) for i in top_indices if 0 <= int(i) < len(feature_names)]
+        if len(top_indices) == 0:
+            raise ValueError("No valid feature indices found for plotting after validation")
 
         top_features = [feature_names[i] for i in top_indices]
         top_importance = importance[top_indices]

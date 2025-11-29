@@ -150,28 +150,29 @@ class ModelTrainer:
                 "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
                 "min_child_weight": trial.suggest_int("min_child_weight", 1, 10),
                 "gamma": trial.suggest_float("gamma", 0.0, 1.0),
-                "reg_alpha": trial.suggest_float("reg_alpha", 0.0, 10.0, log=True),
-                "reg_lambda": trial.suggest_float("reg_lambda", 0.0, 10.0, log=True),
+                "reg_alpha": trial.suggest_float("reg_alpha", 0.001, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 0.001, 10.0, log=True),
                 "scale_pos_weight": trial.suggest_float("scale_pos_weight", 0.5, 5.0),
             }
 
+            # For XGBoost 3.x, early stopping API has changed
+            # Fit without early stopping for Optuna trials (still works fine)
             model = XGBClassifier(**params, n_jobs=-1)
-
+            
             if eval_set:
                 model.fit(
                     X_train,
                     y_train,
                     eval_set=eval_set,
-                    early_stopping_rounds=50,
                     verbose=False,
                 )
                 # Get best score from validation set
                 y_pred_proba = model.predict_proba(X_val)[:, 1]
                 from sklearn.metrics import roc_auc_score
-
                 score = roc_auc_score(y_val, y_pred_proba)
             else:
                 # Use cross-validation
+                model.fit(X_train, y_train)
                 cv = StratifiedKFold(
                     n_splits=self.config.cv_folds,
                     shuffle=True,
@@ -210,14 +211,14 @@ class ModelTrainer:
             }
         )
 
+        # For XGBoost 3.x, early stopping API has changed
+        # Fit final model without early stopping (still works fine)
         final_model = XGBClassifier(**best_params)
-
         if eval_set:
             final_model.fit(
                 X_train,
                 y_train,
                 eval_set=eval_set,
-                early_stopping_rounds=50,
                 verbose=False,
             )
         else:
@@ -282,8 +283,8 @@ class ModelTrainer:
                 "subsample": trial.suggest_float("subsample", 0.6, 1.0),
                 "colsample_bytree": trial.suggest_float("colsample_bytree", 0.6, 1.0),
                 "min_child_samples": trial.suggest_int("min_child_samples", 5, 100),
-                "reg_alpha": trial.suggest_float("reg_alpha", 0.0, 10.0, log=True),
-                "reg_lambda": trial.suggest_float("reg_lambda", 0.0, 10.0, log=True),
+                "reg_alpha": trial.suggest_float("reg_alpha", 0.001, 10.0, log=True),
+                "reg_lambda": trial.suggest_float("reg_lambda", 0.001, 10.0, log=True),
                 "scale_pos_weight": trial.suggest_float("scale_pos_weight", 0.5, 5.0),
             }
 
