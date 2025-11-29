@@ -82,7 +82,4 @@ Work-in-progress churn prediction pipeline I’m building on the Telco Customer 
 
 Refer to `docs/roadmap.md` for the detailed execution plan.
 
-### Troubleshooting
-
-If you encounter issues creating or activating the virtual environment on Windows, see `VENV_TROUBLESHOOTING.md` for common solutions.
 
