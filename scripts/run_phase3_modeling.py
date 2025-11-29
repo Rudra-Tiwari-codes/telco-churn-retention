@@ -199,19 +199,23 @@ def main() -> None:
             model_name=model_type,
         )
 
-        # Generate explanations
-        console.print(f"[bold cyan]Generating explanations for {model_type} model...[/bold cyan]")
-        explainer = ModelExplainer(
-            model=model,
-            X_background=X_train[:1000],  # Sample for efficiency
-            feature_names=list(X.columns),
-        )
-        explainer.generate_explanation_report(
-            X=X_test,
-            output_dir=output_dir / model_type,
-            model_name=model_type,
-            sample_size=500,  # Sample for efficiency
-        )
+        # Generate explanations (skip for now if it fails)
+        try:
+            console.print(f"[bold cyan]Generating explanations for {model_type} model...[/bold cyan]")
+            explainer = ModelExplainer(
+                model=model,
+                X_background=X_train[:1000],  # Sample for efficiency
+                feature_names=list(X.columns),
+            )
+            explainer.generate_explanation_report(
+                X=X_test,
+                output_dir=output_dir / model_type,
+                model_name=model_type,
+                sample_size=500,  # Sample for efficiency
+            )
+        except Exception as e:
+            console.print(f"[yellow]Warning: Could not generate explanations: {e}[/yellow]")
+            console.print("[yellow]Continuing without explanations...[/yellow]")
 
         # Save model
         import joblib
@@ -219,6 +223,24 @@ def main() -> None:
         model_path = output_dir / model_type / f"{model_type}_model.pkl"
         joblib.dump(model, model_path)
         console.print(f"[green]Saved model to: {model_path}[/green]")
+
+        # Save feature pipeline (load from Phase 2 output)
+        # Find the feature pipeline from the processed data directory
+        processed_dir = args.input_dir
+        timestamp_dirs = [d for d in processed_dir.iterdir() if d.is_dir()]
+        if timestamp_dirs:
+            latest_processed_dir = max(timestamp_dirs, key=lambda p: p.name)
+            pipeline_source = latest_processed_dir / "feature_pipeline.pkl"
+            if pipeline_source.exists():
+                pipeline_dest = output_dir / model_type / "feature_pipeline.pkl"
+                import shutil
+
+                shutil.copy2(pipeline_source, pipeline_dest)
+                console.print(f"[green]Saved feature pipeline to: {pipeline_dest}[/green]")
+            else:
+                console.print(
+                    f"[yellow]Warning: Feature pipeline not found at {pipeline_source}[/yellow]"
+                )
 
         # Log to MLflow
         with mlflow.start_run(run_name=f"{model_type}_final"):
