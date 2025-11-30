@@ -20,7 +20,7 @@ def test_health():
     assert data["status"] == "healthy", f"Expected healthy, got {data['status']}"
     assert data["model_loaded"] == True, "Model should be loaded"
     assert data["pipeline_loaded"] == True, "Pipeline should be loaded"
-    print("✓ Health check passed")
+    print("[OK] Health check passed")
     print(f"  Status: {data['status']}")
     print(f"  Model loaded: {data['model_loaded']}")
     print(f"  Pipeline loaded: {data['pipeline_loaded']}")
@@ -37,7 +37,7 @@ def test_metadata():
     assert "model_type" in data, "Missing model_type"
     assert "feature_count" in data, "Missing feature_count"
     assert data["feature_count"] > 0, "Feature count should be > 0"
-    print("✓ Metadata endpoint passed")
+    print("[OK] Metadata endpoint passed")
     print(f"  Model Type: {data['model_type']}")
     print(f"  Model Version: {data.get('model_version', 'N/A')}")
     print(f"  Feature Count: {data['feature_count']}")
@@ -97,7 +97,7 @@ def test_single_prediction():
     assert 0 <= data["churn_probability"] <= 1, "Probability should be between 0 and 1"
     assert isinstance(data["churn_prediction"], bool), "Prediction should be boolean"
     
-    print("✓ Single prediction passed")
+    print("[OK] Single prediction passed")
     print(f"  Customer ID: {data['customerID']}")
     print(f"  Churn Probability: {data['churn_probability']:.4f}")
     print(f"  Churn Prediction: {data['churn_prediction']}")
@@ -106,9 +106,9 @@ def test_single_prediction():
     
     # FAANG latency check
     if elapsed < 0.1:
-        print("  ✓ Latency < 100ms (FAANG standard)")
+        print("  [OK] Latency < 100ms (FAANG standard)")
     else:
-        print(f"  ⚠ Latency >= 100ms ({elapsed*1000:.2f} ms)")
+        print(f"  [WARN] Latency >= 100ms ({elapsed*1000:.2f} ms)")
     
     return True
 
@@ -160,7 +160,7 @@ def test_batch_prediction():
     assert len(data["predictions"]) == 3, f"Expected 3 predictions, got {len(data['predictions'])}"
     assert data["total_customers"] == 3, f"Expected 3 total, got {data['total_customers']}"
     
-    print("✓ Batch prediction passed")
+    print("[OK] Batch prediction passed")
     print(f"  Total customers: {data['total_customers']}")
     print(f"  Predictions returned: {len(data['predictions'])}")
     print(f"  Latency: {elapsed*1000:.2f} ms")
@@ -178,18 +178,18 @@ def test_validation():
     invalid_data = {"customerID": "test", "tenure": -1}
     response = requests.post(f"{API_BASE_URL}/predict", json=invalid_data, timeout=10)
     assert response.status_code == 422, f"Expected 422 for validation error, got {response.status_code}"
-    print("✓ Invalid tenure rejected")
+    print("[OK] Invalid tenure rejected")
     
     # Test missing fields
     incomplete_data = {"customerID": "test"}
     response = requests.post(f"{API_BASE_URL}/predict", json=incomplete_data, timeout=10)
     assert response.status_code == 422, f"Expected 422 for missing fields, got {response.status_code}"
-    print("✓ Missing fields rejected")
+    print("[OK] Missing fields rejected")
     
     # Test empty batch
     response = requests.post(f"{API_BASE_URL}/predict/batch", json={"customers": []}, timeout=10)
     assert response.status_code == 422, f"Expected 422 for empty batch, got {response.status_code}"
-    print("✓ Empty batch rejected")
+    print("[OK] Empty batch rejected")
     
     return True
 
@@ -237,7 +237,7 @@ def test_performance():
                 latencies.append(elapsed * 1000)  # Convert to ms
                 successes += 1
         except Exception as e:
-            print(f"  ⚠ Request {i+1} failed: {e}")
+            print(f"  [WARN] Request {i+1} failed: {e}")
     
     if latencies:
         import numpy as np
@@ -246,7 +246,7 @@ def test_performance():
         p95 = np.percentile(latencies, 95)
         p99 = np.percentile(latencies, 99)
         
-        print(f"✓ Performance test completed")
+        print(f"[OK] Performance test completed")
         print(f"  Successful requests: {successes}/{num_requests}")
         print(f"  Average latency: {avg_latency:.2f} ms")
         print(f"  P50 latency: {p50:.2f} ms")
@@ -255,16 +255,16 @@ def test_performance():
         
         # FAANG standards
         if avg_latency < 100:
-            print("  ✓ Average latency < 100ms (FAANG standard)")
+            print("  [OK] Average latency < 100ms (FAANG standard)")
         else:
-            print(f"  ⚠ Average latency >= 100ms")
+            print(f"  [WARN] Average latency >= 100ms")
         
         if p95 < 200:
-            print("  ✓ P95 latency < 200ms (FAANG standard)")
+            print("  [OK] P95 latency < 200ms (FAANG standard)")
         else:
-            print(f"  ⚠ P95 latency >= 200ms")
+            print(f"  [WARN] P95 latency >= 200ms")
     else:
-        print("  ✗ No successful requests")
+        print("  [FAIL] No successful requests")
         return False
     
     return True
@@ -290,7 +290,7 @@ def main():
             result = test_func()
             results.append((name, result))
         except Exception as e:
-            print(f"\n✗ {name} FAILED: {e}")
+            print(f"\n[FAIL] {name} FAILED: {e}")
             results.append((name, False))
     
     # Summary
@@ -301,7 +301,7 @@ def main():
     total = len(results)
     
     for name, result in results:
-        status = "✓ PASS" if result else "✗ FAIL"
+        status = "[OK] PASS" if result else "[FAIL] FAIL"
         print(f"  {name}: {status}")
     
     print(f"\nTotal: {passed}/{total} tests passed")
@@ -309,7 +309,7 @@ def main():
     if passed == total:
         print("\n🎉 ALL TESTS PASSED! Phase 4 is working correctly.")
     else:
-        print(f"\n⚠ {total - passed} test(s) failed. Please review.")
+        print(f"\n[WARN] {total - passed} test(s) failed. Please review.")
     
     return passed == total
 
