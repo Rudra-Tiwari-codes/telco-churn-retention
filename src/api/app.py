@@ -4,9 +4,11 @@ FastAPI application for churn prediction API.
 
 from __future__ import annotations
 
+import logging
 import os
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any
+from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,35 +24,23 @@ from src.api.models import (
     PredictionResponse,
 )
 from src.api.service import ModelService
+from src.utils.logging_config import get_logger, setup_logging
 
-# Initialize FastAPI app
-app = FastAPI(
-    title="Telco Churn Prediction API",
-    description="API for predicting customer churn using machine learning models",
-    version="1.0.0",
-    docs_url="/docs",
-    redoc_url="/redoc",
-)
-
-# CORS middleware
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # In production, specify actual origins
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# Configure logging
+setup_logging()
+logger = get_logger(__name__)
 
 # Global model service
 model_service: ModelService | None = None
 
 
-@app.on_event("startup")
-async def startup_event() -> None:
-    """Load model and pipeline on startup."""
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+    """Lifespan context manager for startup and shutdown events."""
     global model_service
 
-    # Get model directory from environment or use default
+    # Startup: Load model and pipeline
+    logger.info("Starting up API service...")
     model_dir = os.getenv("MODEL_DIR", "models")
     threshold = float(os.getenv("PREDICTION_THRESHOLD", "0.5"))
 
@@ -59,15 +49,45 @@ async def startup_event() -> None:
             model_dir=Path(model_dir),
             threshold=threshold,
         )
-        import logging
-
-        logging.info(f"Model loaded successfully from {model_dir}")
+        logger.info(f"Model loaded successfully from {model_dir}")
     except Exception as e:
-        import logging
-
-        logging.error(f"Failed to load model: {e}")
+        logger.error(f"Failed to load model: {e}", exc_info=True)
         # Don't raise - allow health check to show status
         model_service = None
+
+    yield
+
+    # Shutdown: Cleanup if needed
+    logger.info("Shutting down API service...")
+    model_service = None
+
+
+# Initialize FastAPI app
+app = FastAPI(
+    title="Telco Churn Prediction API",
+    description="API for predicting customer churn using machine learning models",
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc",
+    lifespan=lifespan,
+)
+
+# CORS middleware - configure via environment variable
+_cors_origins = os.getenv("CORS_ORIGINS", "*")
+if _cors_origins == "*":
+    # Allow all origins (development only)
+    cors_origins_list = ["*"]
+else:
+    # Parse comma-separated list of origins
+    cors_origins_list = [origin.strip() for origin in _cors_origins.split(",")]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=cors_origins_list,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
