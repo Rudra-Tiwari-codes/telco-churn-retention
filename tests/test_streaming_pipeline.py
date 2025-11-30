@@ -16,10 +16,10 @@ print("=" * 80)
 # Test with simulation mode
 model_dir = PROJECT_ROOT / "models"
 if not model_dir.exists():
-    print("✗ Models directory not found")
+    print("[FAIL] Models directory not found")
     sys.exit(1)
 
-print(f"\n✓ Model directory found: {model_dir}")
+print(f"\n[OK] Model directory found: {model_dir}")
 print("  Running streaming pipeline in simulation mode...\n")
 
 try:
@@ -28,9 +28,9 @@ try:
         simulate=True,
         batch_size=5,  # Process 5 events
     )
-    print("\n✓ Streaming pipeline test completed successfully!")
+    print("\n[OK] Streaming pipeline test completed successfully!")
 except Exception as e:
-    print(f"\n✗ Streaming pipeline test failed: {e}")
+    print(f"\n[FAIL] Streaming pipeline test failed: {e}")
     import traceback
     traceback.print_exc()
     sys.exit(1)
