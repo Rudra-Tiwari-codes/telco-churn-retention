@@ -10,6 +10,7 @@ from typing import Any
 import mlflow
 import numpy as np
 import optuna
+import pandas as pd
 from sklearn.model_selection import StratifiedKFold, cross_val_score
 from xgboost import XGBClassifier
 
@@ -375,28 +376,58 @@ class ModelTrainer:
 
     def train(
         self,
-        X_train: np.ndarray,
-        y_train: np.ndarray,
-        X_val: np.ndarray | None = None,
-        y_val: np.ndarray | None = None,
+        X_train: pd.DataFrame | np.ndarray,
+        y_train: pd.Series | np.ndarray,
+        X_val: pd.DataFrame | np.ndarray | None = None,
+        y_val: pd.Series | np.ndarray | None = None,
     ) -> Any:
         """Train model based on config.
 
         Args:
-            X_train: Training features.
-            y_train: Training targets.
-            X_val: Validation features (optional).
-            y_val: Validation targets (optional).
+            X_train: Training features (DataFrame or numpy array).
+            y_train: Training targets (Series or numpy array).
+            X_val: Validation features (optional, DataFrame or numpy array).
+            y_val: Validation targets (optional, Series or numpy array).
 
         Returns:
             Trained model.
         """
+        # Convert DataFrames/Series to numpy arrays for baseline model
+        # XGBoost and LightGBM can handle DataFrames directly
+        if isinstance(X_train, pd.DataFrame):
+            X_train_array = X_train.values
+        else:
+            X_train_array = X_train
+            
+        if isinstance(y_train, pd.Series):
+            y_train_array = y_train.values
+        else:
+            y_train_array = y_train
+            
+        if X_val is not None:
+            if isinstance(X_val, pd.DataFrame):
+                X_val_array = X_val.values
+            else:
+                X_val_array = X_val
+        else:
+            X_val_array = None
+            
+        if y_val is not None:
+            if isinstance(y_val, pd.Series):
+                y_val_array = y_val.values
+            else:
+                y_val_array = y_val
+        else:
+            y_val_array = None
+        
         if self.config.model_type == "baseline":
-            return self.train_baseline(X_train, y_train, X_val, y_val)
+            return self.train_baseline(X_train_array, y_train_array, X_val_array, y_val_array)
         elif self.config.model_type == "xgboost":
-            return self.train_xgboost(X_train, y_train, X_val, y_val)
+            # XGBoost can handle DataFrames, but convert for consistency
+            return self.train_xgboost(X_train_array, y_train_array, X_val_array, y_val_array)
         elif self.config.model_type == "lightgbm":
-            return self.train_lightgbm(X_train, y_train, X_val, y_val)
+            # LightGBM can handle DataFrames, but convert for consistency
+            return self.train_lightgbm(X_train_array, y_train_array, X_val_array, y_val_array)
         else:
             raise ValueError(f"Unknown model type: {self.config.model_type}")
 
