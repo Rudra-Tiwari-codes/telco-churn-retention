@@ -14,7 +14,7 @@ import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
-from src.features.pipeline import apply_feature_pipeline, create_feature_pipeline
+from src.features.pipeline import apply_feature_pipeline
 from src.models.baseline import BaselineModel
 from src.models.explainability import ModelExplainer
 
@@ -62,17 +62,17 @@ class ModelService:
         """Load model and pipeline from directory.
 
         Looks for latest timestamped directory or specific model type.
-        
+
         Raises:
             FileNotFoundError: If model directory doesn't exist or is empty.
             ValueError: If model directory structure is invalid.
         """
         model_dir = Path(model_dir)
-        
+
         # Validate model directory exists
         if not model_dir.exists():
             raise FileNotFoundError(f"Model directory does not exist: {model_dir}")
-        
+
         if not model_dir.is_dir():
             raise ValueError(f"Model path is not a directory: {model_dir}")
 
@@ -188,7 +188,7 @@ class ModelService:
         """Load feature pipeline from file."""
         if pipeline_path.exists():
             self.pipeline = joblib.load(pipeline_path)
-            
+
             # Extract feature names from pipeline
             try:
                 # Try to get feature names from the preprocessor
@@ -244,7 +244,9 @@ class ModelService:
             # If all else fails, use empty background
             pass
 
-    def predict(self, customer_data: dict[str, Any], include_explanation: bool = True) -> dict[str, Any]:
+    def predict(
+        self, customer_data: dict[str, Any], include_explanation: bool = True
+    ) -> dict[str, Any]:
         """Make prediction for a single customer.
 
         Args:
@@ -368,7 +370,7 @@ class ModelService:
         for key, value in self.performance_metrics.items():
             if isinstance(value, (int, float)):
                 perf_metrics[key] = float(value)
-        
+
         return {
             "model_type": self.model_type,
             "model_version": self.model_version,
@@ -385,4 +387,3 @@ class ModelService:
             True if model and pipeline are loaded.
         """
         return self.model is not None and self.pipeline is not None
-

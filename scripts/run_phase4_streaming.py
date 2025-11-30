@@ -57,25 +57,26 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Use actual Kafka (requires Kafka running)",
     )
-    
+
     args = parser.parse_args()
-    
+
     # Check if simulate was explicitly set via command line arguments
     # If --simulate or --no-simulate was provided, args.simulate will be True or False
     # If neither was provided, we need to check sys.argv to detect this
     import sys
+
     simulate_explicitly_set = "--simulate" in sys.argv or "--no-simulate" in sys.argv
     args._simulate_explicitly_set = simulate_explicitly_set
-    
+
     return args
 
 
 def main() -> None:
     """Run streaming pipeline."""
     import os
-    
+
     args = parse_args()
-    
+
     # Default to simulation if KAFKA_BOOTSTRAP_SERVERS is not set
     # If neither --simulate nor --no-simulate was provided, use environment-based default
     if not args._simulate_explicitly_set:
@@ -97,4 +98,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

@@ -29,8 +29,7 @@ def find_latest_processed_data(processed_dir: Path) -> tuple[Path | None, Path |
 
     # Find all directories with train.parquet
     dirs_with_data = [
-        d for d in processed_dir.iterdir()
-        if d.is_dir() and (d / "train.parquet").exists()
+        d for d in processed_dir.iterdir() if d.is_dir() and (d / "train.parquet").exists()
     ]
 
     if not dirs_with_data:
@@ -45,7 +44,7 @@ def find_latest_processed_data(processed_dir: Path) -> tuple[Path | None, Path |
     if len(dirs_with_data) == 1:
         # Only one dataset available - use it for both reference and current
         console.print(
-            f"[yellow]Warning: Only one processed dataset found. Using it for both reference and current.[/yellow]"
+            "[yellow]Warning: Only one processed dataset found. Using it for both reference and current.[/yellow]"
         )
         path = dirs_with_data[0] / "train.parquet"
         return path, path
@@ -74,12 +73,15 @@ def main_auto() -> None:
     original_argv = sys.argv.copy()
     sys.argv = [
         "run_phase5_monitoring_auto.py",
-        "--reference-data", str(reference_path),
-        "--current-data", str(current_path),
+        "--reference-data",
+        str(reference_path),
+        "--current-data",
+        str(current_path),
     ]
 
     try:
         import scripts.run_phase5_monitoring as monitoring_module
+
         monitoring_module.main()
     finally:
         sys.argv = original_argv
@@ -87,4 +89,3 @@ def main_auto() -> None:
 
 if __name__ == "__main__":
     main_auto()
-

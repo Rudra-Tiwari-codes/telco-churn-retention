@@ -102,11 +102,13 @@ def create_feature_pipeline(
     # Create preprocessing pipeline
     # Note: ColumnTransformer will be applied to data after custom features are created
     # Add imputer for numeric features to handle NaN values
-    numeric_pipeline = Pipeline([
-        ("imputer", SimpleImputer(strategy="mean")),
-        ("scaler", StandardScaler()),
-    ])
-    
+    numeric_pipeline = Pipeline(
+        [
+            ("imputer", SimpleImputer(strategy="mean")),
+            ("scaler", StandardScaler()),
+        ]
+    )
+
     preprocessor = ColumnTransformer(
         transformers=[
             ("num", numeric_pipeline, numeric_features),
@@ -149,7 +151,9 @@ def apply_feature_pipeline(
     if metadata_columns is None:
         metadata_columns = ["customerID"]
     if metadata_columns:
-        df_features = df_features.drop(columns=[col for col in metadata_columns if col in df_features.columns])
+        df_features = df_features.drop(
+            columns=[col for col in metadata_columns if col in df_features.columns]
+        )
 
     # Separate target if present
     target = None
@@ -171,7 +175,9 @@ def apply_feature_pipeline(
 
     # Ensure pipeline is fitted before applying transformations
     if not hasattr(pipeline, "named_steps"):
-        raise ValueError("Pipeline must be fitted before applying transformations. Call pipeline.fit() first.")
+        raise ValueError(
+            "Pipeline must be fitted before applying transformations. Call pipeline.fit() first."
+        )
 
     # Access pipeline steps - simplified approach
     with warnings.catch_warnings():

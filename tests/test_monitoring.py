@@ -4,10 +4,9 @@ from __future__ import annotations
 
 import numpy as np
 import pandas as pd
-import pytest
 
 from src.monitoring.drift import DriftDetector, DriftMetrics, DriftReport
-from src.monitoring.performance import PerformanceMonitor, PerformanceMetrics
+from src.monitoring.performance import PerformanceMetrics, PerformanceMonitor
 
 
 def test_drift_detector_psi_numeric() -> None:
@@ -58,9 +57,7 @@ def test_detect_feature_drift() -> None:
     reference_data = pd.DataFrame({"feature1": np.random.normal(0, 1, 1000)})
     current_data = pd.DataFrame({"feature1": np.random.normal(0, 1, 1000)})
 
-    metrics = detector.detect_feature_drift(
-        reference_data, current_data, "feature1"
-    )
+    metrics = detector.detect_feature_drift(reference_data, current_data, "feature1")
 
     assert isinstance(metrics, DriftMetrics)
     assert metrics.feature_name == "feature1"
@@ -71,14 +68,18 @@ def test_generate_drift_report() -> None:
     """Test drift report generation."""
     detector = DriftDetector()
 
-    reference_data = pd.DataFrame({
-        "feature1": np.random.normal(0, 1, 1000),
-        "feature2": np.random.choice(["A", "B", "C"], 1000),
-    })
-    current_data = pd.DataFrame({
-        "feature1": np.random.normal(0, 1, 1000),
-        "feature2": np.random.choice(["A", "B", "C"], 1000),
-    })
+    reference_data = pd.DataFrame(
+        {
+            "feature1": np.random.normal(0, 1, 1000),
+            "feature2": np.random.choice(["A", "B", "C"], 1000),
+        }
+    )
+    current_data = pd.DataFrame(
+        {
+            "feature1": np.random.normal(0, 1, 1000),
+            "feature2": np.random.choice(["A", "B", "C"], 1000),
+        }
+    )
 
     report = detector.generate_drift_report(reference_data, current_data)
 
@@ -128,4 +129,3 @@ def test_performance_monitor_compare_baseline() -> None:
     assert report.performance_degradation is True
     assert report.degradation_severity in ["none", "low", "medium", "high"]
     assert report.metric_changes is not None
-

@@ -34,9 +34,7 @@ def numeric_summary(df: pd.DataFrame) -> str:
         f"| {idx} | {row['mean']} | {row['std']} | {row['min']} | {row['50%']} | {row['max']} |"
         for idx, row in desc.iterrows()
     )
-    header = (
-        "| Column | Mean | Std | Min | Median | Max |\n" "| --- | --- | --- | --- | --- | --- |"
-    )
+    header = "| Column | Mean | Std | Min | Median | Max |\n| --- | --- | --- | --- | --- | --- |"
     return "\n".join([header, rows])
 
 

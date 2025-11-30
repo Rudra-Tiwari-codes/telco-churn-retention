@@ -3,7 +3,7 @@
 from src.monitoring.alerts import AlertManager
 from src.monitoring.dashboard import MonitoringDashboard
 from src.monitoring.drift import DriftDetector, DriftMetrics, DriftReport
-from src.monitoring.performance import PerformanceMonitor, PerformanceMetrics, PerformanceReport
+from src.monitoring.performance import PerformanceMetrics, PerformanceMonitor, PerformanceReport
 
 __all__ = [
     "AlertManager",

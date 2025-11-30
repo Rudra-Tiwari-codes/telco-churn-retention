@@ -4,11 +4,11 @@ FastAPI application for churn prediction API.
 
 from __future__ import annotations
 
-import logging
 import os
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, AsyncGenerator
+from typing import Any
 
 from fastapi import FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
@@ -18,7 +18,6 @@ from src.api.models import (
     BatchPredictionRequest,
     BatchPredictionResponse,
     CustomerData,
-    ErrorResponse,
     HealthResponse,
     ModelMetadata,
     PredictionResponse,
@@ -93,8 +92,12 @@ app.add_middleware(
 @app.get("/health", response_model=HealthResponse, tags=["Health"])
 async def health_check() -> HealthResponse:
     """Health check endpoint."""
-    model_loaded = model_service is not None and model_service.is_ready() if model_service else False
-    pipeline_loaded = model_service is not None and model_service.pipeline is not None if model_service else False
+    model_loaded = (
+        model_service is not None and model_service.is_ready() if model_service else False
+    )
+    pipeline_loaded = (
+        model_service is not None and model_service.pipeline is not None if model_service else False
+    )
 
     status_str = "healthy" if (model_loaded and pipeline_loaded) else "degraded"
 
@@ -140,12 +143,12 @@ async def predict(customer: CustomerData) -> PredictionResponse:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e),
-        )
+        ) from e
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Prediction failed: {str(e)}",
-        )
+        ) from e
 
 
 @app.post("/predict/batch", response_model=BatchPredictionResponse, tags=["Prediction"])
@@ -186,7 +189,7 @@ async def predict_batch(request: BatchPredictionRequest) -> BatchPredictionRespo
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Batch prediction failed: {str(e)}",
-        )
+        ) from e
 
 
 @app.exception_handler(Exception)
@@ -207,4 +210,3 @@ async def root() -> dict[str, str]:
         "docs": "/docs",
         "health": "/health",
     }
-

@@ -461,7 +461,9 @@ class DriftDetector:
             "total_features_checked": len(data_drift),
             "features_with_drift": sum(1 for m in data_drift if m.drift_detected),
             "drift_severity_counts": drift_counts,
-            "prediction_drift_detected": prediction_drift.drift_detected if prediction_drift else False,
+            "prediction_drift_detected": (
+                prediction_drift.drift_detected if prediction_drift else False
+            ),
             "label_drift_detected": label_drift.drift_detected if label_drift else False,
         }
 
@@ -473,4 +475,3 @@ class DriftDetector:
             overall_drift_detected=overall_drift,
             drift_summary=drift_summary,
         )
-

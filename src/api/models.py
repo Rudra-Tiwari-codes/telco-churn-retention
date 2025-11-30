@@ -4,8 +4,6 @@ Pydantic models for API request and response schemas.
 
 from __future__ import annotations
 
-from typing import Any
-
 from pydantic import BaseModel, Field, field_validator
 
 
@@ -57,7 +55,14 @@ class CustomerData(BaseModel):
             raise ValueError(f"Must be 'Yes', 'No', or 'No phone service', got '{v}'")
         return v
 
-    @field_validator("OnlineSecurity", "OnlineBackup", "DeviceProtection", "TechSupport", "StreamingTV", "StreamingMovies")
+    @field_validator(
+        "OnlineSecurity",
+        "OnlineBackup",
+        "DeviceProtection",
+        "TechSupport",
+        "StreamingTV",
+        "StreamingMovies",
+    )
     @classmethod
     def validate_service_fields(cls, v: str) -> str:
         """Validate service fields."""
@@ -165,7 +170,9 @@ class PredictionResponse(BaseModel):
 class BatchPredictionRequest(BaseModel):
     """Request for batch predictions."""
 
-    customers: list[CustomerData] = Field(..., min_length=1, description="List of customers to predict")
+    customers: list[CustomerData] = Field(
+        ..., min_length=1, description="List of customers to predict"
+    )
 
     class Config:
         """Pydantic config."""
@@ -286,4 +293,3 @@ class ErrorResponse(BaseModel):
                 "detail": "Field 'tenure' must be >= 0",
             }
         }
-

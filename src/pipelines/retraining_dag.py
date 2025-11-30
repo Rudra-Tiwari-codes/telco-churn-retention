@@ -20,7 +20,7 @@ import pandas as pd
 from rich.console import Console
 from sklearn.model_selection import train_test_split
 
-from src.data.ingestion import IngestionConfig, clean_dataset, load_raw_dataset, run_ingestion
+from src.data.ingestion import IngestionConfig, run_ingestion
 from src.data.validation import run_validation
 from src.features.pipeline import apply_feature_pipeline, create_feature_pipeline
 from src.models.evaluation import ModelEvaluator
@@ -147,8 +147,7 @@ class RetrainingDAG:
             # Task 6: Model Promotion (if enabled and metrics meet threshold)
             if self.enable_promotion:
                 result6 = self._task_model_promotion(
-                    result4.output_paths["summary_path"],
-                    result5.output_paths["metrics_path"]
+                    result4.output_paths["summary_path"], result5.output_paths["metrics_path"]
                 )
                 self.results.append(result6)
 
@@ -173,7 +172,7 @@ class RetrainingDAG:
             snapshot_path = run_ingestion(config)
 
             duration = (datetime.now(UTC) - start_time).total_seconds()
-            console.print(f"[green][OK] Data ingestion completed[/green]")
+            console.print("[green][OK] Data ingestion completed[/green]")
 
             return TaskResult(
                 task_name="data_ingestion",
@@ -290,7 +289,9 @@ class RetrainingDAG:
                 json.dump(provenance, f, indent=2)
 
             duration = (datetime.now(UTC) - start_time).total_seconds()
-            console.print(f"[green][OK] Feature engineering completed ({len(X_transformed.columns)} features)[/green]")
+            console.print(
+                f"[green][OK] Feature engineering completed ({len(X_transformed.columns)} features)[/green]"
+            )
 
             return TaskResult(
                 task_name="feature_engineering",
@@ -319,9 +320,7 @@ class RetrainingDAG:
                 duration_seconds=duration,
             )
 
-    def _task_model_training(
-        self, train_path: Path, target_path: Path
-    ) -> TaskResult:
+    def _task_model_training(self, train_path: Path, target_path: Path) -> TaskResult:
         """Task 4: Train models."""
         console.print("[cyan]Task 4: Model Training[/cyan]")
         start_time = datetime.now(UTC)
@@ -381,7 +380,7 @@ class RetrainingDAG:
             mlflow_run_id = None
             with mlflow.start_run(run_name=f"retraining_{self.timestamp}"):
                 mlflow_run_id = mlflow.active_run().info.run_id
-                
+
                 # Log metrics
                 mlflow.log_metric("test_roc_auc", test_metrics.roc_auc)
                 mlflow.log_metric("test_pr_auc", test_metrics.pr_auc)
@@ -389,23 +388,23 @@ class RetrainingDAG:
                 mlflow.log_metric("test_precision", test_metrics.precision)
                 mlflow.log_metric("test_recall", test_metrics.recall)
                 mlflow.log_metric("test_f1", test_metrics.f1)
-                
+
                 # Log parameters
                 mlflow.log_param("timestamp", self.timestamp)
                 mlflow.log_param("model_type", "xgboost")
                 if trainer.best_params:
                     mlflow.log_params(trainer.best_params)
-                
+
                 # Log model
                 mlflow.xgboost.log_model(trainer.model, "model")
-                
+
                 # Log artifacts
                 if (model_output_dir / "xgboost" / "feature_pipeline.pkl").exists():
                     mlflow.log_artifact(
                         str(model_output_dir / "xgboost" / "feature_pipeline.pkl"),
-                        artifact_path="artifacts"
+                        artifact_path="artifacts",
                     )
-                
+
                 console.print(f"[dim]MLflow run ID: {mlflow_run_id}[/dim]")
 
             # Save summary
@@ -430,7 +429,9 @@ class RetrainingDAG:
                 json.dump(summary, f, indent=2)
 
             duration = (datetime.now(UTC) - start_time).total_seconds()
-            console.print(f"[green][OK] Model training completed (ROC-AUC: {test_metrics.roc_auc:.4f})[/green]")
+            console.print(
+                f"[green][OK] Model training completed (ROC-AUC: {test_metrics.roc_auc:.4f})[/green]"
+            )
 
             return TaskResult(
                 task_name="model_training",
@@ -490,7 +491,7 @@ class RetrainingDAG:
             test_metrics.to_json(metrics_path)
 
             duration = (datetime.now(UTC) - start_time).total_seconds()
-            console.print(f"[green][OK] Model evaluation completed[/green]")
+            console.print("[green][OK] Model evaluation completed[/green]")
 
             return TaskResult(
                 task_name="model_evaluation",
@@ -516,7 +517,7 @@ class RetrainingDAG:
 
     def _task_model_promotion(self, summary_path: Path, metrics_path: Path) -> TaskResult:
         """Task 6: Promote model to production if metrics meet threshold.
-        
+
         This task:
         1. Checks if metrics meet the promotion threshold
         2. Registers the model in MLflow Model Registry
@@ -550,35 +551,25 @@ class RetrainingDAG:
 
             mlflow_run_id = summary_data.get("mlflow_run_id")
             if not mlflow_run_id:
-                raise ValueError("MLflow run ID not found in summary. Model must be logged to MLflow first.")
+                raise ValueError(
+                    "MLflow run ID not found in summary. Model must be logged to MLflow first."
+                )
 
             # Set up MLflow
             mlflow.set_experiment(self.mlflow_experiment)
             from mlflow.tracking import MlflowClient
 
             client = MlflowClient()
-            
+
             # Model registry name
             model_name = "telco_churn_xgboost"
-            
+
             console.print(f"[dim]Registering model from run: {mlflow_run_id}[/dim]")
-            
+
             # Register the model in MLflow Model Registry
             model_uri = f"runs:/{mlflow_run_id}/model"
             try:
-                # Check if model with same name exists
-                try:
-                    # Get latest version to increment
-                    latest_versions = client.get_latest_versions(model_name, stages=["None"])
-                    if latest_versions:
-                        version = int(latest_versions[0].version) + 1
-                    else:
-                        version = 1
-                except Exception:
-                    # Model doesn't exist yet, start from version 1
-                    version = 1
-                
-                # Register model version
+                # Register model version (MLflow automatically assigns version numbers)
                 model_version = client.create_model_version(
                     name=model_name,
                     source=model_uri,
@@ -588,54 +579,55 @@ class RetrainingDAG:
                         "timestamp": self.timestamp,
                         "roc_auc": str(roc_auc),
                         "model_type": "xgboost",
-                    }
+                    },
                 )
-                
+
                 console.print(f"[green]Registered model version: {model_version.version}[/green]")
-                
+
                 # Archive any existing Production models
                 try:
                     production_versions = client.get_latest_versions(
-                        model_name, 
-                        stages=["Production"]
+                        model_name, stages=["Production"]
                     )
                     for prod_version in production_versions:
-                        console.print(f"[yellow]Archiving previous Production version: {prod_version.version}[/yellow]")
+                        console.print(
+                            f"[yellow]Archiving previous Production version: {prod_version.version}[/yellow]"
+                        )
                         client.transition_model_version_stage(
                             name=model_name,
                             version=prod_version.version,
                             stage="Archived",
-                            archive_existing_versions=True
+                            archive_existing_versions=True,
                         )
                 except Exception as e:
                     # No existing Production models or error archiving
                     logger.debug(f"No existing Production models to archive: {e}")
-                
+
                 # Transition new model to Staging first (best practice)
-                console.print(f"[dim]Transitioning to Staging...[/dim]")
+                console.print("[dim]Transitioning to Staging...[/dim]")
                 client.transition_model_version_stage(
                     name=model_name,
                     version=model_version.version,
                     stage="Staging",
-                    archive_existing_versions=False
+                    archive_existing_versions=False,
                 )
-                
+
                 # Then transition to Production
-                console.print(f"[dim]Transitioning to Production...[/dim]")
+                console.print("[dim]Transitioning to Production...[/dim]")
                 client.transition_model_version_stage(
                     name=model_name,
                     version=model_version.version,
                     stage="Production",
-                    archive_existing_versions=False
+                    archive_existing_versions=False,
                 )
-                
+
                 duration = (datetime.now(UTC) - start_time).total_seconds()
                 message = (
                     f"Model promoted to production (ROC-AUC: {roc_auc:.4f}, "
                     f"Version: {model_version.version})"
                 )
                 console.print(f"[green][OK] {message}[/green]")
-                
+
                 # Create promotion metadata file
                 promotion_metadata = {
                     "model_registry_name": model_name,
@@ -647,7 +639,7 @@ class RetrainingDAG:
                 promotion_metadata_path = summary_path.parent / "promotion_metadata.json"
                 with open(promotion_metadata_path, "w") as f:
                     json.dump(promotion_metadata, f, indent=2)
-                
+
                 return TaskResult(
                     task_name="model_promotion",
                     status=TaskStatus.SUCCESS,
@@ -657,14 +649,14 @@ class RetrainingDAG:
                     },
                     duration_seconds=duration,
                 )
-                
+
             except Exception as reg_error:
                 # Model registration might fail if MLflow backend doesn't support it
                 # (e.g., file-based tracking). Log warning but don't fail.
                 error_msg = str(reg_error)
                 logger.warning(f"Model registry not available: {error_msg}")
                 logger.warning("Continuing with simplified promotion (file-based only)")
-                
+
                 # For file-based tracking, just log the promotion
                 duration = (datetime.now(UTC) - start_time).total_seconds()
                 message = (
@@ -672,7 +664,7 @@ class RetrainingDAG:
                     f"Model Registry not available (file-based tracking)."
                 )
                 console.print(f"[yellow][WARN] {message}[/yellow]")
-                
+
                 return TaskResult(
                     task_name="model_promotion",
                     status=TaskStatus.SUCCESS,
@@ -696,9 +688,7 @@ class RetrainingDAG:
 
     def _build_summary(self) -> dict[str, Any]:
         """Build execution summary."""
-        total_duration = sum(
-            r.duration_seconds or 0 for r in self.results if r.duration_seconds
-        )
+        total_duration = sum(r.duration_seconds or 0 for r in self.results if r.duration_seconds)
         success_count = sum(1 for r in self.results if r.status == TaskStatus.SUCCESS)
         failed_count = sum(1 for r in self.results if r.status == TaskStatus.FAILED)
 
@@ -718,10 +708,9 @@ class RetrainingDAG:
         with open(summary_path, "w") as f:
             json.dump(summary, f, indent=2)
 
-        console.print(f"\n[bold]Pipeline Summary:[/bold]")
+        console.print("\n[bold]Pipeline Summary:[/bold]")
         console.print(f"  Status: {summary['status']}")
         console.print(f"  Tasks: {success_count}/{len(self.results)} successful")
         console.print(f"  Duration: {total_duration:.2f}s")
 
         return summary
-

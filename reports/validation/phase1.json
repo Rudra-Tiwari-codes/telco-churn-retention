@@ -240,14 +240,14 @@
     "expectation_suite_name": "telco_phase1",
     "run_id": {
       "run_name": null,
-      "run_time": "2025-11-29T00:26:19.525558+11:00"
+      "run_time": "2025-11-30T17:29:10.064181+11:00"
     },
     "batch_spec": {},
     "batch_markers": {
-      "ge_load_time": "20251128T132619.475647Z"
+      "ge_load_time": "20251130T062909.966036Z"
     },
     "active_batch_definition": {},
-    "validation_time": "20251128T132619.525505Z",
+    "validation_time": "20251130T062910.064070Z",
     "checkpoint_name": null
   },
   "id": null

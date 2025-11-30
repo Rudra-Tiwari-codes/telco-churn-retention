@@ -13,6 +13,7 @@ import pandas as pd
 # Try to import seaborn, but make it optional
 try:
     import seaborn as sns
+
     sns.set_style("whitegrid")
     HAS_SEABORN = True
 except ImportError:
@@ -73,7 +74,7 @@ class MonitoringDashboard:
         colors = [color_map.get(sev, "gray") for sev in df["severity"]]
 
         # Plot
-        bars = ax.barh(df["feature"], df["psi"], color=colors)
+        ax.barh(df["feature"], df["psi"], color=colors)
         ax.axvline(x=0.1, color="yellow", linestyle="--", label="Low Drift Threshold")
         ax.axvline(x=0.25, color="red", linestyle="--", label="High Drift Threshold")
         ax.set_xlabel("PSI (Population Stability Index)")
@@ -134,7 +135,9 @@ class MonitoringDashboard:
 
         # Accuracy
         if df["accuracy"].notna().any():
-            axes[0, 1].plot(df["timestamp"], df["accuracy"], marker="o", label="Accuracy", color="green")
+            axes[0, 1].plot(
+                df["timestamp"], df["accuracy"], marker="o", label="Accuracy", color="green"
+            )
             axes[0, 1].set_title("Accuracy Over Time")
             axes[0, 1].set_ylabel("Accuracy")
             axes[0, 1].grid(True, alpha=0.3)
@@ -290,8 +293,12 @@ class MonitoringDashboard:
             if current_vals and baseline_vals:
                 x = range(len(metric_labels))
                 width = 0.35
-                ax.bar([i - width / 2 for i in x], baseline_vals, width, label="Baseline", color="blue")
-                ax.bar([i + width / 2 for i in x], current_vals, width, label="Current", color="red")
+                ax.bar(
+                    [i - width / 2 for i in x], baseline_vals, width, label="Baseline", color="blue"
+                )
+                ax.bar(
+                    [i + width / 2 for i in x], current_vals, width, label="Current", color="red"
+                )
                 ax.set_ylabel("Score")
                 ax.set_title("Performance Comparison: Baseline vs Current")
                 ax.set_xticks(x)
@@ -338,4 +345,3 @@ class MonitoringDashboard:
         plt.tight_layout()
         plt.savefig(save_path, dpi=300, bbox_inches="tight")
         plt.close()
-

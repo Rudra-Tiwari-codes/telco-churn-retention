@@ -40,13 +40,13 @@ def find_latest_raw_data(raw_dir: Path) -> Path | None:
 def parse_args() -> argparse.Namespace:
     """Parse command line arguments."""
     parser = argparse.ArgumentParser(description="Phase 5 retraining pipeline")
-    
+
     # Find default raw data file (latest CSV in data/raw)
     raw_dir = Path("data/raw")
     default_raw_data = find_latest_raw_data(raw_dir)
     if default_raw_data is None:
         default_raw_data = Path("data/raw/telco_data_28_11_2025.csv")  # Fallback
-    
+
     parser.add_argument(
         "--raw-data",
         type=Path,
@@ -121,4 +121,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-

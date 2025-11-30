@@ -7,7 +7,6 @@ from __future__ import annotations
 import json
 import logging
 import os
-from dataclasses import asdict
 from pathlib import Path
 from typing import Any
 
@@ -35,17 +34,17 @@ class AlertManager:
         """
         # Load from environment variables if not provided
         self.slack_webhook_url = slack_webhook_url or os.getenv("SLACK_WEBHOOK_URL")
-        
+
         # Load email config from environment if not provided
         if email_config is None:
             email_config = self._load_email_config_from_env()
         self.email_config = email_config
-        
+
         self.alert_file = alert_file
-    
+
     def _load_email_config_from_env(self) -> dict[str, Any] | None:
         """Load email configuration from environment variables.
-        
+
         Returns:
             Email config dict or None if not all required vars are set.
         """
@@ -55,21 +54,21 @@ class AlertManager:
         smtp_password = os.getenv("SMTP_PASSWORD")
         smtp_from = os.getenv("SMTP_FROM_EMAIL")
         smtp_to = os.getenv("SMTP_TO_EMAILS")
-        
+
         if not all([smtp_server, smtp_port, smtp_from, smtp_to]):
             return None
-        
+
         config: dict[str, Any] = {
             "smtp_server": smtp_server,
             "smtp_port": int(smtp_port),
             "from_email": smtp_from,
             "to_emails": [email.strip() for email in smtp_to.split(",")],
         }
-        
+
         if smtp_username and smtp_password:
             config["username"] = smtp_username
             config["password"] = smtp_password
-        
+
         return config
 
     def send_alert(
@@ -173,8 +172,8 @@ class AlertManager:
     ) -> None:
         """Send alert via email."""
         import smtplib
-        from email.mime.text import MIMEText
         from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
 
         if not self.email_config:
             return
@@ -195,9 +194,7 @@ class AlertManager:
         msg.attach(MIMEText(body, "plain"))
 
         # Send email
-        server = smtplib.SMTP(
-            self.email_config["smtp_server"], self.email_config["smtp_port"]
-        )
+        server = smtplib.SMTP(self.email_config["smtp_server"], self.email_config["smtp_port"])
         server.starttls()
         if "username" in self.email_config and "password" in self.email_config:
             server.login(self.email_config["username"], self.email_config["password"])
@@ -342,4 +339,3 @@ class AlertManager:
             else performance_report.degradation_severity
         )
         return self.send_alert(title, message, severity=alert_severity, metadata=metadata)
-

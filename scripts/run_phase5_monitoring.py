@@ -10,8 +10,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
 
-import pandas as pd
 from datetime import UTC, datetime
+
+import pandas as pd
 from rich.console import Console
 
 from src.monitoring.alerts import AlertManager
@@ -100,8 +101,12 @@ def main() -> None:
     reference_data = pd.read_parquet(args.reference_data)
     current_data = pd.read_parquet(args.current_data)
 
-    console.print(f"Reference data: {len(reference_data)} samples, {len(reference_data.columns)} features")
-    console.print(f"Current data: {len(current_data)} samples, {len(current_data.columns)} features\n")
+    console.print(
+        f"Reference data: {len(reference_data)} samples, {len(reference_data.columns)} features"
+    )
+    console.print(
+        f"Current data: {len(current_data)} samples, {len(current_data.columns)} features\n"
+    )
 
     # Initialize drift detector
     drift_detector = DriftDetector(psi_threshold=0.2, ks_threshold=0.05)
@@ -145,7 +150,7 @@ def main() -> None:
     console.print(f"[green][OK] Drift report saved to {drift_report_path}[/green]")
 
     # Print summary
-    console.print(f"\n[bold]Drift Detection Summary:[/bold]")
+    console.print("\n[bold]Drift Detection Summary:[/bold]")
     console.print(f"  Overall drift detected: {drift_report.overall_drift_detected}")
     if drift_report.drift_summary:
         console.print(
@@ -192,7 +197,7 @@ def main() -> None:
         performance_report.to_json(perf_report_path)
         console.print(f"[green][OK] Performance report saved to {perf_report_path}[/green]")
 
-        console.print(f"\n[bold]Performance Summary:[/bold]")
+        console.print("\n[bold]Performance Summary:[/bold]")
         console.print(f"  Degradation detected: {performance_report.performance_degradation}")
         console.print(f"  Severity: {performance_report.degradation_severity}")
 
@@ -229,10 +234,9 @@ def main() -> None:
 
         console.print("[green][OK] Alerts processed[/green]")
 
-    console.print(f"\n[bold green]Monitoring workflow completed![/bold green]")
+    console.print("\n[bold green]Monitoring workflow completed![/bold green]")
     console.print(f"Reports saved to: {args.output_dir}")
 
 
 if __name__ == "__main__":
     main()
-

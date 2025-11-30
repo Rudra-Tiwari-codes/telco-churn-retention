@@ -1,4 +1,5 @@
 """Test streaming pipeline."""
+
 import sys
 from pathlib import Path
 
@@ -32,6 +33,6 @@ try:
 except Exception as e:
     print(f"\n[FAIL] Streaming pipeline test failed: {e}")
     import traceback
+
     traceback.print_exc()
     sys.exit(1)
-

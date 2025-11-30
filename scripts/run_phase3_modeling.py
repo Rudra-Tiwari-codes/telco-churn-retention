@@ -210,7 +210,9 @@ def main() -> None:
 
         # Generate explanations (skip for now if it fails)
         try:
-            console.print(f"[bold cyan]Generating explanations for {model_type} model...[/bold cyan]")
+            console.print(
+                f"[bold cyan]Generating explanations for {model_type} model...[/bold cyan]"
+            )
             explainer = ModelExplainer(
                 model=model,
                 X_background=X_train[:1000],  # Sample for efficiency

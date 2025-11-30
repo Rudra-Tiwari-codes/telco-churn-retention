@@ -8,7 +8,6 @@ import json
 from dataclasses import asdict, dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
 
 import numpy as np
 import pandas as pd
@@ -258,4 +257,3 @@ class PerformanceMonitor:
         # Save
         with open(metrics_file, "w") as f:
             json.dump([m.to_dict() for m in history], f, indent=2)
-

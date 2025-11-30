@@ -12,17 +12,14 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 from pathlib import Path
 from typing import Any
 
-import re
-
-import numpy as np
 import pandas as pd
 
 from src.api.models import CustomerData
 from src.api.service import ModelService
-from src.features.pipeline import apply_feature_pipeline
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -45,7 +42,7 @@ def camel_to_snake_case(name: str) -> str:
     # Handle special case: ID at the end
     if name.endswith("ID"):
         name = name[:-2] + "Id"
-    
+
     # Insert underscore before uppercase letters, then convert to lowercase
     # Pattern: split before uppercase letters that follow lowercase letters or numbers
     s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
@@ -130,7 +127,7 @@ class StreamingPipeline:
         # Validate required fields are present
         required_fields = ["customerID", "tenure", "MonthlyCharges"]
         missing_fields = []
-        
+
         for field in required_fields:
             # Check all possible naming variants
             variants = [
@@ -138,11 +135,11 @@ class StreamingPipeline:
                 field.lower(),  # lowercase (e.g., "monthlycharges")
                 camel_to_snake_case(field),  # snake_case (e.g., "monthly_charges", "customer_id")
             ]
-            
+
             # Check if any variant exists in the event
             if not any(event.get(variant) is not None for variant in variants):
                 missing_fields.append(field)
-        
+
         if missing_fields:
             raise ValueError(
                 f"Missing required fields in event: {missing_fields}. "
@@ -163,13 +160,16 @@ class StreamingPipeline:
             "InternetService": event.get("InternetService") or event.get("internet_service", "No"),
             "OnlineSecurity": event.get("OnlineSecurity") or event.get("online_security", "No"),
             "OnlineBackup": event.get("OnlineBackup") or event.get("online_backup", "No"),
-            "DeviceProtection": event.get("DeviceProtection") or event.get("device_protection", "No"),
+            "DeviceProtection": event.get("DeviceProtection")
+            or event.get("device_protection", "No"),
             "TechSupport": event.get("TechSupport") or event.get("tech_support", "No"),
             "StreamingTV": event.get("StreamingTV") or event.get("streaming_tv", "No"),
             "StreamingMovies": event.get("StreamingMovies") or event.get("streaming_movies", "No"),
             "Contract": event.get("Contract") or event.get("contract", "Month-to-month"),
-            "PaperlessBilling": event.get("PaperlessBilling") or event.get("paperless_billing", "No"),
-            "PaymentMethod": event.get("PaymentMethod") or event.get("payment_method", "Electronic check"),
+            "PaperlessBilling": event.get("PaperlessBilling")
+            or event.get("paperless_billing", "No"),
+            "PaymentMethod": event.get("PaymentMethod")
+            or event.get("payment_method", "Electronic check"),
             "MonthlyCharges": float(event.get("MonthlyCharges") or event.get("monthly_charges", 0)),
             "TotalCharges": (
                 float(event.get("TotalCharges") or event.get("total_charges", 0))
@@ -218,11 +218,11 @@ class StreamingPipeline:
                 # );
                 if hasattr(self.postgres_client, "execute"):
                     query = """
-                        INSERT INTO churn_predictions 
+                        INSERT INTO churn_predictions
                         (customer_id, churn_probability, churn_prediction, prediction_timestamp, result)
                         VALUES (%s, %s, %s, NOW(), %s)
-                        ON CONFLICT (customer_id) 
-                        DO UPDATE SET 
+                        ON CONFLICT (customer_id)
+                        DO UPDATE SET
                             churn_probability = EXCLUDED.churn_probability,
                             churn_prediction = EXCLUDED.churn_prediction,
                             prediction_timestamp = EXCLUDED.prediction_timestamp,
@@ -304,7 +304,7 @@ def run_streaming_pipeline(
     logger = logging.getLogger(__name__)
 
     logger.info("Starting streaming pipeline...")
-    
+
     # Load configuration from environment variables if not provided
     kafka_topic = kafka_topic or os.getenv("KAFKA_TOPIC", "customer_events")
     redis_host = redis_host or os.getenv("REDIS_HOST", "localhost")
@@ -354,10 +354,10 @@ def run_streaming_pipeline(
             from kafka import KafkaConsumer
 
             # Load Kafka bootstrap servers from environment variable
-            kafka_bootstrap_servers = os.getenv(
-                "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
-            ).split(",")
-            
+            kafka_bootstrap_servers = os.getenv("KAFKA_BOOTSTRAP_SERVERS", "localhost:9092").split(
+                ","
+            )
+
             kafka_consumer = KafkaConsumer(
                 kafka_topic,
                 bootstrap_servers=kafka_bootstrap_servers,
@@ -366,7 +366,9 @@ def run_streaming_pipeline(
             )
             logger.info(f"Connected to Kafka topic: {kafka_topic} at {kafka_bootstrap_servers}")
         except ImportError:
-            logger.error("kafka-python package not installed. Install with: pip install kafka-python")
+            logger.error(
+                "kafka-python package not installed. Install with: pip install kafka-python"
+            )
             return
         except Exception as e:
             logger.error(f"Could not connect to Kafka: {e}")
@@ -417,4 +419,3 @@ def run_streaming_pipeline(
         logger.info(f"Streaming pipeline completed. Processed {processed_count} events.")
         if not simulate and hasattr(kafka_consumer, "close"):
             kafka_consumer.close()
-
