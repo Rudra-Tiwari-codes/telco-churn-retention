@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -126,6 +127,14 @@ def main() -> None:
     """Run modeling workflow."""
     args = parse_args()
     console = Console()
+
+    # Configure MLflow tracking URI (defaults to local file system)
+    mlflow_tracking_uri = os.getenv("MLFLOW_TRACKING_URI", "file:./mlruns")
+    mlflow.set_tracking_uri(mlflow_tracking_uri)
+    console.print(f"[green]MLflow tracking URI: {mlflow_tracking_uri}[/green]")
+
+    # Set experiment
+    mlflow.set_experiment(args.mlflow_experiment)
 
     # Load data
     console.print("[bold cyan]Loading processed features...[/bold cyan]")
@@ -274,7 +283,7 @@ def main() -> None:
             }
         )
 
-        console.print(f"[green]✓ {model_type} model complete![/green]")
+        console.print(f"[green][OK] {model_type} model complete![/green]")
         console.print(f"  ROC-AUC: {test_metrics.roc_auc:.4f}")
         console.print(f"  PR-AUC: {test_metrics.pr_auc:.4f}")
         console.print(f"  F1: {test_metrics.f1:.4f}")
