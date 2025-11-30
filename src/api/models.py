@@ -4,7 +4,7 @@ Pydantic models for API request and response schemas.
 
 from __future__ import annotations
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
 class CustomerData(BaseModel):
@@ -102,10 +102,8 @@ class CustomerData(BaseModel):
             raise ValueError(f"Must be one of {valid_values}, got '{v}'")
         return v
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "customerID": "1234-ABCD",
                 "gender": "Male",
@@ -129,6 +127,7 @@ class CustomerData(BaseModel):
                 "TotalCharges": 845.0,
             }
         }
+    )
 
 
 class FeatureExplanation(BaseModel):
@@ -150,10 +149,8 @@ class PredictionResponse(BaseModel):
         default_factory=list, description="Top feature explanations from SHAP"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "customerID": "1234-ABCD",
                 "churn_probability": 0.73,
@@ -165,6 +162,7 @@ class PredictionResponse(BaseModel):
                 ],
             }
         }
+    )
 
 
 class BatchPredictionRequest(BaseModel):
@@ -174,10 +172,8 @@ class BatchPredictionRequest(BaseModel):
         ..., min_length=1, description="List of customers to predict"
     )
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "customers": [
                     {
@@ -205,6 +201,7 @@ class BatchPredictionRequest(BaseModel):
                 ]
             }
         }
+    )
 
 
 class BatchPredictionResponse(BaseModel):
@@ -213,10 +210,8 @@ class BatchPredictionResponse(BaseModel):
     predictions: list[PredictionResponse] = Field(..., description="List of predictions")
     total_customers: int = Field(..., description="Total number of customers processed")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "predictions": [
                     {
@@ -230,6 +225,7 @@ class BatchPredictionResponse(BaseModel):
                 "total_customers": 1,
             }
         }
+    )
 
 
 class ModelMetadata(BaseModel):
@@ -242,10 +238,8 @@ class ModelMetadata(BaseModel):
     performance_metrics: dict[str, float] = Field(..., description="Model performance metrics")
     threshold: float = Field(..., description="Default prediction threshold")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "model_type": "xgboost",
                 "model_version": "20250127T120000Z",
@@ -255,6 +249,7 @@ class ModelMetadata(BaseModel):
                 "threshold": 0.5,
             }
         }
+    )
 
 
 class HealthResponse(BaseModel):
@@ -265,10 +260,8 @@ class HealthResponse(BaseModel):
     model_loaded: bool = Field(..., description="Whether model is loaded")
     pipeline_loaded: bool = Field(..., description="Whether feature pipeline is loaded")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "status": "healthy",
                 "version": "1.0.0",
@@ -276,6 +269,7 @@ class HealthResponse(BaseModel):
                 "pipeline_loaded": True,
             }
         }
+    )
 
 
 class ErrorResponse(BaseModel):
@@ -284,12 +278,11 @@ class ErrorResponse(BaseModel):
     error: str = Field(..., description="Error message")
     detail: str | None = Field(None, description="Error detail")
 
-    class Config:
-        """Pydantic config."""
-
-        json_schema_extra = {
+    model_config = ConfigDict(
+        json_schema_extra={
             "example": {
                 "error": "Validation error",
                 "detail": "Field 'tenure' must be >= 0",
             }
         }
+    )
