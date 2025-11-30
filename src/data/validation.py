@@ -7,6 +7,7 @@ from __future__ import annotations
 import json
 import warnings
 from pathlib import Path
+from typing import Any
 
 import pandas as pd
 from great_expectations.core.batch import Batch
@@ -50,7 +51,7 @@ def build_validator(df: pd.DataFrame) -> Validator:
     return validator
 
 
-def run_validation(df: pd.DataFrame, output_path: Path) -> dict:
+def run_validation(df: pd.DataFrame, output_path: Path) -> dict[str, Any]:
     # Suppress Great Expectations warnings about result_format
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=UserWarning, message=".*result_format.*")
