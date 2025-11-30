@@ -130,6 +130,7 @@ def apply_feature_pipeline(
     df: pd.DataFrame,
     pipeline: Pipeline,
     target_column: str = "Churn",
+    metadata_columns: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.Series | None]:
     """Apply feature pipeline to dataframe.
 
@@ -137,20 +138,27 @@ def apply_feature_pipeline(
         df: Input dataframe.
         pipeline: Fitted feature pipeline.
         target_column: Name of target column (if present).
+        metadata_columns: List of metadata columns to drop (e.g., customerID).
 
     Returns:
         Tuple of (transformed_features_df, target_series).
     """
+    df_features = df.copy()
+
+    # Drop metadata columns if specified (e.g., customerID)
+    if metadata_columns is None:
+        metadata_columns = ["customerID"]
+    if metadata_columns:
+        df_features = df_features.drop(columns=[col for col in metadata_columns if col in df_features.columns])
+
     # Separate target if present
     target = None
-    if target_column in df.columns:
+    if target_column and target_column in df_features.columns:
         if target_column == "Churn":
-            target = df[target_column].map({"Yes": 1, "No": 0})
+            target = df_features[target_column].map({"Yes": 1, "No": 0})
         else:
-            target = df[target_column]
-        df_features = df.drop(columns=[target_column])
-    else:
-        df_features = df.copy()
+            target = df_features[target_column]
+        df_features = df_features.drop(columns=[target_column])
 
     # Ensure required columns exist for custom transformers
     required_columns = ["tenure", "MonthlyCharges", "TotalCharges"]
@@ -161,51 +169,22 @@ def apply_feature_pipeline(
             f"Available columns: {list(df_features.columns)}"
         )
 
-    # Apply custom transformers first (these modify dataframe in place)
-    # Use pipeline's internal _transform method or access steps directly
-    # to avoid FutureWarning about accessing named_steps before fitting check
+    # Ensure pipeline is fitted before applying transformations
+    if not hasattr(pipeline, "named_steps"):
+        raise ValueError("Pipeline must be fitted before applying transformations. Call pipeline.fit() first.")
 
-    # Suppress FutureWarning globally for this section since we know pipeline is fitted
+    # Access pipeline steps - simplified approach
     with warnings.catch_warnings():
         warnings.filterwarnings("ignore", category=FutureWarning, module="sklearn.pipeline")
 
-        # Access steps using steps_ attribute (set after fitting) to avoid property access
-        # that triggers the fitted check
-        if hasattr(pipeline, "steps_"):
-            # Pipeline is fitted, use steps_ directly
-            steps_list = pipeline.steps_
-        elif hasattr(pipeline, "_sklearn_fitted") and pipeline._sklearn_fitted:
-            # Alternative check for fitted state
-            steps_list = pipeline.steps
-        else:
-            # Last resort: try to access named_steps with warning suppressed
-            try:
-                steps_dict = dict(pipeline.named_steps.items())
-                custom_pipeline = steps_dict["custom_features"]
-                preprocessor = steps_dict["preprocessor"]
-            except (AttributeError, KeyError) as err:
-                raise ValueError("Pipeline is not fitted. Call pipeline.fit() first.") from err
-            else:
-                # Successfully got steps from named_steps
-                df_with_custom = custom_pipeline.transform(df_features)
-                transformed = preprocessor.transform(df_with_custom)
-                # Convert to DataFrame and return early
-                if isinstance(transformed, pd.DataFrame):
-                    transformed_df = transformed
-                else:
-                    if hasattr(preprocessor, "get_feature_names_out"):
-                        feature_names = preprocessor.get_feature_names_out()
-                    else:
-                        feature_names = [f"feature_{i}" for i in range(transformed.shape[1])]
-                    transformed_df = pd.DataFrame(
-                        transformed, columns=feature_names, index=df_features.index
-                    )
-                return transformed_df, target
-
-        # Convert steps_list to dict
-        steps_dict = dict(steps_list)
-        custom_pipeline = steps_dict["custom_features"]
-        preprocessor = steps_dict["preprocessor"]
+        try:
+            custom_pipeline = pipeline.named_steps["custom_features"]
+            preprocessor = pipeline.named_steps["preprocessor"]
+        except (AttributeError, KeyError) as err:
+            raise ValueError(
+                "Pipeline structure invalid or not fitted. "
+                "Expected steps: 'custom_features' and 'preprocessor'"
+            ) from err
 
         # Transform using custom pipeline
         df_with_custom = custom_pipeline.transform(df_features)
