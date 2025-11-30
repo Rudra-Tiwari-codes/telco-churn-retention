@@ -1,5 +1,6 @@
 """Feature engineering module for telco churn retention platform."""
 
+from src.features.store import FeatureMetadata, FeatureStore
 from src.features.transformers import (
     CustomerLifetimeValueTransformer,
     RevenueSignalTransformer,
@@ -12,4 +13,6 @@ __all__ = [
     "TenureBucketTransformer",
     "RevenueSignalTransformer",
     "CustomerLifetimeValueTransformer",
+    "FeatureMetadata",
+    "FeatureStore",
 ]
