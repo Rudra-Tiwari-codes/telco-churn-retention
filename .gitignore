@@ -24,6 +24,7 @@ data/feature_metadata/*
 
 .env
 .env.*
+!.env.example
 
 mlruns/
 logs/
@@ -32,4 +33,14 @@ htmlcov/
 
 notebooks/.ipynb_checkpoints/
 notebooks/mlruns/
+notebooks/*_executed.ipynb
+
+# Temporary execution scripts and results
+*_execution_results.json
+check_*.py
+execute_*.py
+run_all_*.py
+run_notebook_*.py
+verify_*.py
+show_*.py
 
