@@ -5,6 +5,7 @@ Service layer for model loading, feature transformation, and predictions.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 from typing import Any
 
@@ -16,6 +17,8 @@ from sklearn.pipeline import Pipeline
 from src.features.pipeline import apply_feature_pipeline, create_feature_pipeline
 from src.models.baseline import BaselineModel
 from src.models.explainability import ModelExplainer
+
+logger = logging.getLogger(__name__)
 
 
 class ModelService:
@@ -59,8 +62,19 @@ class ModelService:
         """Load model and pipeline from directory.
 
         Looks for latest timestamped directory or specific model type.
+        
+        Raises:
+            FileNotFoundError: If model directory doesn't exist or is empty.
+            ValueError: If model directory structure is invalid.
         """
         model_dir = Path(model_dir)
+        
+        # Validate model directory exists
+        if not model_dir.exists():
+            raise FileNotFoundError(f"Model directory does not exist: {model_dir}")
+        
+        if not model_dir.is_dir():
+            raise ValueError(f"Model path is not a directory: {model_dir}")
 
         # Find model files
         if model_dir.is_file():
@@ -109,7 +123,10 @@ class ModelService:
             # Look for timestamped subdirectories
             timestamp_dirs = [d for d in model_dir.iterdir() if d.is_dir()]
             if not timestamp_dirs:
-                raise FileNotFoundError(f"No model directories found in {model_dir}")
+                raise FileNotFoundError(
+                    f"No model directories found in {model_dir}. "
+                    f"Expected structure: {model_dir}/<timestamp>/<model_type>/<model_files>"
+                )
 
             # Get latest timestamp
             latest_dir = max(timestamp_dirs, key=lambda p: p.name)
@@ -134,8 +151,18 @@ class ModelService:
             model_path = model_type_dir / f"{best_model_type}_model.pkl"
             pipeline_path = model_type_dir / "feature_pipeline.pkl"
 
+            # If pipeline not in model dir, look in parent or processed data (consistent with above)
             if not pipeline_path.exists():
+                # Try parent directory
                 pipeline_path = latest_dir / "feature_pipeline.pkl"
+                if not pipeline_path.exists():
+                    # Try to find in processed data directory
+                    processed_dir = Path("data/processed")
+                    if processed_dir.exists():
+                        timestamp_dirs = [d for d in processed_dir.iterdir() if d.is_dir()]
+                        if timestamp_dirs:
+                            latest_processed = max(timestamp_dirs, key=lambda p: p.name)
+                            pipeline_path = latest_processed / "feature_pipeline.pkl"
 
             self.model_type = best_model_type
             if summary_path.exists():
@@ -233,8 +260,15 @@ class ModelService:
         # Convert to DataFrame
         df = pd.DataFrame([customer_data])
 
-        # Apply feature pipeline
-        X_transformed, _ = apply_feature_pipeline(df, self.pipeline, target_column=None)
+        # Explicitly drop customerID and other metadata columns before feature transformation
+        metadata_columns = ["customerID"]
+        if metadata_columns:
+            df = df.drop(columns=[col for col in metadata_columns if col in df.columns])
+
+        # Apply feature pipeline (customerID already dropped, so pass empty list to skip redundant drop)
+        X_transformed, _ = apply_feature_pipeline(
+            df, self.pipeline, target_column=None, metadata_columns=[]
+        )
 
         # Get feature names if not set
         if not self.feature_names:
@@ -263,9 +297,9 @@ class ModelService:
             try:
                 explanation = self._get_explanation(X_array[0])
                 result["explanation"] = explanation
-            except Exception:
-                # If explanation fails, continue without it
-                pass
+            except Exception as e:
+                # Log the error but continue without explanation
+                logger.warning(f"Failed to generate explanation: {e}", exc_info=True)
 
         return result
 
@@ -288,13 +322,18 @@ class ModelService:
 
             if self.X_background is None or len(self.X_background) == 0:
                 # Can't create explainer without background
+                logger.warning("Cannot create SHAP explainer: no background data available")
                 return []
 
-            self.explainer = ModelExplainer(
-                model=self.model,
-                X_background=self.X_background,
-                feature_names=self.feature_names,
-            )
+            try:
+                self.explainer = ModelExplainer(
+                    model=self.model,
+                    X_background=self.X_background,
+                    feature_names=self.feature_names,
+                )
+            except Exception as e:
+                logger.warning(f"Failed to initialize SHAP explainer: {e}")
+                return []
 
         try:
             shap_values, explanation_dict = self.explainer.explain_instance(X_instance)
@@ -313,8 +352,9 @@ class ModelService:
                 {"feature": feat, "shap_value": shap_val, "value": val}
                 for feat, shap_val, val in top_features
             ]
-        except Exception:
-            # If explanation fails, return empty list
+        except Exception as e:
+            # Log the error but return empty list to not break predictions
+            logger.warning(f"Failed to generate SHAP explanation: {e}", exc_info=True)
             return []
 
     def get_metadata(self) -> dict[str, Any]:
