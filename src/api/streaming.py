@@ -15,14 +15,43 @@ import logging
 from pathlib import Path
 from typing import Any
 
+import re
+
 import numpy as np
 import pandas as pd
 
+from src.api.models import CustomerData
 from src.api.service import ModelService
 from src.features.pipeline import apply_feature_pipeline
 
 # Setup logging
 logger = logging.getLogger(__name__)
+
+
+def camel_to_snake_case(name: str) -> str:
+    """Convert camelCase to snake_case.
+
+    Handles special cases like:
+    - "customerID" -> "customer_id"
+    - "MonthlyCharges" -> "monthly_charges"
+    - "TotalCharges" -> "total_charges"
+
+    Args:
+        name: camelCase string.
+
+    Returns:
+        snake_case string.
+    """
+    # Handle special case: ID at the end
+    if name.endswith("ID"):
+        name = name[:-2] + "Id"
+    
+    # Insert underscore before uppercase letters, then convert to lowercase
+    # Pattern: split before uppercase letters that follow lowercase letters or numbers
+    s1 = re.sub("(.)([A-Z][a-z]+)", r"\1_\2", name)
+    # Handle consecutive uppercase letters followed by lowercase
+    s2 = re.sub("([a-z0-9])([A-Z])", r"\1_\2", s1)
+    return s2.lower()
 
 
 class StreamingPipeline:
@@ -69,7 +98,16 @@ class StreamingPipeline:
             }
 
             return result
+        except ValueError as e:
+            # Invalid input data
+            logger.warning(f"Invalid event data: {e}")
+            return {
+                "customerID": event.get("customerID", "unknown"),
+                "error": f"Invalid data: {str(e)}",
+                "processed_at": pd.Timestamp.now().isoformat(),
+            }
         except Exception as e:
+            # Unexpected error
             logger.error(f"Error processing event: {e}", exc_info=True)
             return {
                 "customerID": event.get("customerID", "unknown"),
@@ -85,7 +123,32 @@ class StreamingPipeline:
 
         Returns:
             Customer data dictionary compatible with API models.
+
+        Raises:
+            ValueError: If required fields are missing or data is invalid.
         """
+        # Validate required fields are present
+        required_fields = ["customerID", "tenure", "MonthlyCharges"]
+        missing_fields = []
+        
+        for field in required_fields:
+            # Check all possible naming variants
+            variants = [
+                field,  # camelCase (e.g., "MonthlyCharges")
+                field.lower(),  # lowercase (e.g., "monthlycharges")
+                camel_to_snake_case(field),  # snake_case (e.g., "monthly_charges", "customer_id")
+            ]
+            
+            # Check if any variant exists in the event
+            if not any(event.get(variant) is not None for variant in variants):
+                missing_fields.append(field)
+        
+        if missing_fields:
+            raise ValueError(
+                f"Missing required fields in event: {missing_fields}. "
+                f"Event keys: {list(event.keys())}"
+            )
+
         # Map event fields to customer data structure
         # Handle different event formats
         customer_data = {
@@ -115,7 +178,13 @@ class StreamingPipeline:
             ),
         }
 
-        return customer_data
+        # Validate using Pydantic model to ensure data integrity
+        try:
+            validated = CustomerData(**customer_data)
+            return validated.model_dump()
+        except Exception as e:
+            logger.error(f"Invalid customer data extracted from event: {e}")
+            raise ValueError(f"Invalid customer data: {e}") from e
 
     def store_result(self, result: dict[str, Any], customer_id: str) -> None:
         """Store prediction result in Redis and/or Postgres.
@@ -137,9 +206,40 @@ class StreamingPipeline:
         # Store in Postgres for persistence
         if self.postgres_client:
             try:
-                # This would insert into a predictions table
-                # Implementation depends on your Postgres setup
-                logger.debug(f"Would store result in Postgres for customer {customer_id}")
+                # Postgres storage implementation
+                # Requires a postgres_client with execute() method
+                # Example schema:
+                # CREATE TABLE churn_predictions (
+                #     customer_id VARCHAR(255) PRIMARY KEY,
+                #     churn_probability FLOAT,
+                #     churn_prediction BOOLEAN,
+                #     prediction_timestamp TIMESTAMP,
+                #     result JSONB
+                # );
+                if hasattr(self.postgres_client, "execute"):
+                    query = """
+                        INSERT INTO churn_predictions 
+                        (customer_id, churn_probability, churn_prediction, prediction_timestamp, result)
+                        VALUES (%s, %s, %s, NOW(), %s)
+                        ON CONFLICT (customer_id) 
+                        DO UPDATE SET 
+                            churn_probability = EXCLUDED.churn_probability,
+                            churn_prediction = EXCLUDED.churn_prediction,
+                            prediction_timestamp = EXCLUDED.prediction_timestamp,
+                            result = EXCLUDED.result
+                    """
+                    self.postgres_client.execute(
+                        query,
+                        (
+                            customer_id,
+                            result.get("churn_probability"),
+                            result.get("churn_prediction"),
+                            json.dumps(result),
+                        ),
+                    )
+                    logger.debug(f"Stored result in Postgres for customer {customer_id}")
+                else:
+                    logger.warning("Postgres client provided but does not have execute() method")
             except Exception as e:
                 logger.error(f"Error storing in Postgres: {e}")
 
@@ -179,9 +279,9 @@ class KafkaSimulator:
 
 def run_streaming_pipeline(
     model_dir: Path,
-    kafka_topic: str = "customer_events",
-    redis_host: str = "localhost",
-    redis_port: int = 6379,
+    kafka_topic: str | None = None,
+    redis_host: str | None = None,
+    redis_port: int | None = None,
     batch_size: int = 100,
     simulate: bool = True,
     events: list[dict[str, Any]] | None = None,
@@ -190,19 +290,25 @@ def run_streaming_pipeline(
 
     Args:
         model_dir: Directory containing trained models.
-        kafka_topic: Kafka topic to consume from.
-        redis_host: Redis host.
-        redis_port: Redis port.
+        kafka_topic: Kafka topic to consume from. If None, uses KAFKA_TOPIC env var or "customer_events".
+        redis_host: Redis host. If None, uses REDIS_HOST env var or "localhost".
+        redis_port: Redis port. If None, uses REDIS_PORT env var or 6379.
         batch_size: Number of events to process in a batch.
         simulate: Whether to use Kafka simulator (for testing).
         events: List of events for simulation.
     """
     import logging
+    import os
 
     logging.basicConfig(level=logging.INFO)
     logger = logging.getLogger(__name__)
 
     logger.info("Starting streaming pipeline...")
+    
+    # Load configuration from environment variables if not provided
+    kafka_topic = kafka_topic or os.getenv("KAFKA_TOPIC", "customer_events")
+    redis_host = redis_host or os.getenv("REDIS_HOST", "localhost")
+    redis_port = redis_port or int(os.getenv("REDIS_PORT", "6379"))
 
     # Initialize model service
     model_service = ModelService(model_dir=model_dir)
@@ -247,13 +353,18 @@ def run_streaming_pipeline(
         try:
             from kafka import KafkaConsumer
 
+            # Load Kafka bootstrap servers from environment variable
+            kafka_bootstrap_servers = os.getenv(
+                "KAFKA_BOOTSTRAP_SERVERS", "localhost:9092"
+            ).split(",")
+            
             kafka_consumer = KafkaConsumer(
                 kafka_topic,
-                bootstrap_servers=["localhost:9092"],
+                bootstrap_servers=kafka_bootstrap_servers,
                 value_deserializer=lambda m: json.loads(m.decode("utf-8")),
                 auto_offset_reset="latest",
             )
-            logger.info(f"Connected to Kafka topic: {kafka_topic}")
+            logger.info(f"Connected to Kafka topic: {kafka_topic} at {kafka_bootstrap_servers}")
         except ImportError:
             logger.error("kafka-python package not installed. Install with: pip install kafka-python")
             return
