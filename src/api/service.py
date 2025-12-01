@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
@@ -19,6 +20,55 @@ from src.models.baseline import BaselineModel
 from src.models.explainability import ModelExplainer
 
 logger = logging.getLogger(__name__)
+
+
+def _resolve_processed_data_dir(model_dir: Path | None = None) -> Path | None:
+    """Resolve processed data directory path.
+    
+    Tries multiple strategies:
+    1. Environment variable PROCESSED_DATA_DIR
+    2. Relative to project root (assuming standard structure)
+    3. Relative to model_dir parent
+    
+    Args:
+        model_dir: Optional model directory to use as reference.
+        
+    Returns:
+        Resolved Path if found, None otherwise.
+    """
+    # Try environment variable first
+    env_path = os.getenv("PROCESSED_DATA_DIR")
+    if env_path:
+        path = Path(env_path)
+        if path.exists():
+            return path.resolve()
+    
+    # Try relative to project root (go up from src/api/service.py)
+    try:
+        project_root = Path(__file__).resolve().parents[2]
+        processed_dir = project_root / "data" / "processed"
+        if processed_dir.exists():
+            return processed_dir.resolve()
+    except (IndexError, AttributeError):
+        pass
+    
+    # Try relative to model_dir parent if provided
+    if model_dir:
+        try:
+            # Assume model_dir is in project root, so go to parent/data/processed
+            project_root = model_dir.resolve().parent
+            processed_dir = project_root / "data" / "processed"
+            if processed_dir.exists():
+                return processed_dir.resolve()
+        except (AttributeError, ValueError):
+            pass
+    
+    # Try current working directory as last resort
+    cwd_processed = Path("data/processed").resolve()
+    if cwd_processed.exists():
+        return cwd_processed
+    
+    return None
 
 
 class ModelService:
@@ -77,10 +127,12 @@ class ModelService:
             raise ValueError(f"Model path is not a directory: {model_dir}")
 
         # Find model files
+        checked_paths: list[Path] = []
         if model_dir.is_file():
             # Direct path to model file
             model_path = model_dir
             pipeline_path = model_dir.parent / "feature_pipeline.pkl"
+            checked_paths.append(pipeline_path)
         elif (model_dir / "model_summary.json").exists():
             # Phase 3 output directory structure
             summary_path = model_dir / "model_summary.json"
@@ -104,17 +156,20 @@ class ModelService:
             pipeline_path = model_type_dir / "feature_pipeline.pkl"
 
             # If pipeline not in model dir, look in parent or processed data
+            checked_paths = [pipeline_path]
             if not pipeline_path.exists():
                 # Try parent directory
                 pipeline_path = model_dir / "feature_pipeline.pkl"
+                checked_paths.append(pipeline_path)
                 if not pipeline_path.exists():
                     # Try to find in processed data directory
-                    processed_dir = Path("data/processed")
-                    if processed_dir.exists():
+                    processed_dir = _resolve_processed_data_dir(model_dir)
+                    if processed_dir:
                         timestamp_dirs = [d for d in processed_dir.iterdir() if d.is_dir()]
                         if timestamp_dirs:
                             latest_processed = max(timestamp_dirs, key=lambda p: p.name)
                             pipeline_path = latest_processed / "feature_pipeline.pkl"
+                            checked_paths.append(pipeline_path)
 
             self.model_type = best_model_type
             self.model_version = summary.get("timestamp", "unknown")
@@ -152,17 +207,20 @@ class ModelService:
             pipeline_path = model_type_dir / "feature_pipeline.pkl"
 
             # If pipeline not in model dir, look in parent or processed data (consistent with above)
+            checked_paths = [pipeline_path]
             if not pipeline_path.exists():
                 # Try parent directory
                 pipeline_path = latest_dir / "feature_pipeline.pkl"
+                checked_paths.append(pipeline_path)
                 if not pipeline_path.exists():
                     # Try to find in processed data directory
-                    processed_dir = Path("data/processed")
-                    if processed_dir.exists():
+                    processed_dir = _resolve_processed_data_dir(model_dir)
+                    if processed_dir:
                         timestamp_dirs = [d for d in processed_dir.iterdir() if d.is_dir()]
                         if timestamp_dirs:
                             latest_processed = max(timestamp_dirs, key=lambda p: p.name)
                             pipeline_path = latest_processed / "feature_pipeline.pkl"
+                            checked_paths.append(pipeline_path)
 
             self.model_type = best_model_type
             if summary_path.exists():
@@ -171,7 +229,10 @@ class ModelService:
                 self.performance_metrics = summary.get("best_model", {})
 
         self._load_model(model_path)
-        self._load_pipeline(pipeline_path)
+        # Ensure checked_paths includes the final pipeline_path
+        if pipeline_path not in checked_paths:
+            checked_paths.append(pipeline_path)
+        self._load_pipeline(pipeline_path, checked_paths)
 
     def _load_model(self, model_path: Path) -> None:
         """Load model from file."""
@@ -184,10 +245,16 @@ class ModelService:
         if isinstance(self.model, BaselineModel):
             self.model = self.model.get_model()
 
-    def _load_pipeline(self, pipeline_path: Path) -> None:
-        """Load feature pipeline from file."""
+    def _load_pipeline(self, pipeline_path: Path, checked_paths: list[Path] | None = None) -> None:
+        """Load feature pipeline from file.
+        
+        Args:
+            pipeline_path: Path to pipeline file.
+            checked_paths: Optional list of all paths that were checked (for better error messages).
+        """
         if pipeline_path.exists():
             self.pipeline = joblib.load(pipeline_path)
+            logger.info(f"Loaded feature pipeline from {pipeline_path}")
 
             # Extract feature names from pipeline
             try:
@@ -209,10 +276,13 @@ class ModelService:
         else:
             # Pipeline not saved, create and fit with dummy data
             # This is a fallback - ideally pipeline should be saved in Phase 3
-            raise FileNotFoundError(
-                f"Feature pipeline not found at {pipeline_path}. "
-                "Please ensure feature pipeline is saved during Phase 3 training."
-            )
+            error_msg = f"Feature pipeline not found at {pipeline_path}."
+            if checked_paths:
+                error_msg += f"\nChecked the following locations:\n"
+                for path in checked_paths:
+                    error_msg += f"  - {path.resolve()}\n"
+            error_msg += "Please ensure feature pipeline is saved during Phase 3 training."
+            raise FileNotFoundError(error_msg)
 
     def _prepare_background_data(self, processed_data_dir: Path) -> None:
         """Prepare background data for SHAP explainer.
@@ -222,6 +292,13 @@ class ModelService:
         """
         try:
             # Try to load from latest processed data
+            if not processed_data_dir.exists():
+                logger.warning(
+                    f"Processed data directory does not exist: {processed_data_dir}. "
+                    "SHAP explanations may be inaccurate."
+                )
+                return
+                
             timestamp_dirs = [d for d in processed_data_dir.iterdir() if d.is_dir()]
             if timestamp_dirs:
                 latest_dir = max(timestamp_dirs, key=lambda p: p.name)
@@ -233,16 +310,36 @@ class ModelService:
                     X_sample = X_train.sample(n=sample_size, random_state=42)
                     self.X_background = X_sample.values
                     self.feature_names = list(X_sample.columns)
+                    logger.info(f"Loaded background data from {train_path} for SHAP explanations")
                     return
+                else:
+                    logger.warning(
+                        f"Train data not found at {train_path}. "
+                        "SHAP explanations may be inaccurate."
+                    )
+            else:
+                logger.warning(
+                    f"No timestamp directories found in {processed_data_dir}. "
+                    "SHAP explanations may be inaccurate."
+                )
 
             # Fallback: create dummy background
             # This won't work well but prevents errors
             if self.feature_names:
                 n_features = len(self.feature_names)
                 self.X_background = np.zeros((10, n_features))
-        except Exception:
+                logger.warning(
+                    f"Using dummy background data (zeros) for SHAP explanations. "
+                    f"This may produce inaccurate explanations. "
+                    f"Please ensure processed training data is available at {processed_data_dir}."
+                )
+        except Exception as e:
             # If all else fails, use empty background
-            pass
+            logger.warning(
+                f"Failed to prepare background data from {processed_data_dir}: {e}. "
+                "SHAP explanations will be unavailable.",
+                exc_info=True
+            )
 
     def predict(
         self, customer_data: dict[str, Any], include_explanation: bool = True
@@ -318,9 +415,16 @@ class ModelService:
             # Initialize explainer if not already done
             if self.X_background is None:
                 # Try to get background from processed data
-                processed_dir = Path("data/processed")
-                if processed_dir.exists():
+                # Use model_dir if available to resolve processed data directory
+                processed_dir = _resolve_processed_data_dir()
+                if processed_dir:
                     self._prepare_background_data(processed_dir)
+                else:
+                    logger.warning(
+                        "Could not resolve processed data directory. "
+                        "SHAP explanations will be unavailable. "
+                        "Set PROCESSED_DATA_DIR environment variable or ensure data/processed exists."
+                    )
 
             if self.X_background is None or len(self.X_background) == 0:
                 # Can't create explainer without background
