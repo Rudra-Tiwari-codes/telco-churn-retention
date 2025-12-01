@@ -24,15 +24,15 @@ logger = logging.getLogger(__name__)
 
 def _resolve_processed_data_dir(model_dir: Path | None = None) -> Path | None:
     """Resolve processed data directory path.
-    
+
     Tries multiple strategies:
     1. Environment variable PROCESSED_DATA_DIR
     2. Relative to project root (assuming standard structure)
     3. Relative to model_dir parent
-    
+
     Args:
         model_dir: Optional model directory to use as reference.
-        
+
     Returns:
         Resolved Path if found, None otherwise.
     """
@@ -42,7 +42,7 @@ def _resolve_processed_data_dir(model_dir: Path | None = None) -> Path | None:
         path = Path(env_path)
         if path.exists():
             return path.resolve()
-    
+
     # Try relative to project root (go up from src/api/service.py)
     try:
         project_root = Path(__file__).resolve().parents[2]
@@ -51,7 +51,7 @@ def _resolve_processed_data_dir(model_dir: Path | None = None) -> Path | None:
             return processed_dir.resolve()
     except (IndexError, AttributeError):
         pass
-    
+
     # Try relative to model_dir parent if provided
     if model_dir:
         try:
@@ -62,12 +62,12 @@ def _resolve_processed_data_dir(model_dir: Path | None = None) -> Path | None:
                 return processed_dir.resolve()
         except (AttributeError, ValueError):
             pass
-    
+
     # Try current working directory as last resort
     cwd_processed = Path("data/processed").resolve()
     if cwd_processed.exists():
         return cwd_processed
-    
+
     return None
 
 
@@ -247,7 +247,7 @@ class ModelService:
 
     def _load_pipeline(self, pipeline_path: Path, checked_paths: list[Path] | None = None) -> None:
         """Load feature pipeline from file.
-        
+
         Args:
             pipeline_path: Path to pipeline file.
             checked_paths: Optional list of all paths that were checked (for better error messages).
@@ -278,7 +278,7 @@ class ModelService:
             # This is a fallback - ideally pipeline should be saved in Phase 3
             error_msg = f"Feature pipeline not found at {pipeline_path}."
             if checked_paths:
-                error_msg += f"\nChecked the following locations:\n"
+                error_msg += "\nChecked the following locations:\n"
                 for path in checked_paths:
                     error_msg += f"  - {path.resolve()}\n"
             error_msg += "Please ensure feature pipeline is saved during Phase 3 training."
@@ -298,7 +298,7 @@ class ModelService:
                     "SHAP explanations may be inaccurate."
                 )
                 return
-                
+
             timestamp_dirs = [d for d in processed_data_dir.iterdir() if d.is_dir()]
             if timestamp_dirs:
                 latest_dir = max(timestamp_dirs, key=lambda p: p.name)
