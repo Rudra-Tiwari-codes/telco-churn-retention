@@ -338,7 +338,7 @@ class ModelService:
             logger.warning(
                 f"Failed to prepare background data from {processed_data_dir}: {e}. "
                 "SHAP explanations will be unavailable.",
-                exc_info=True
+                exc_info=True,
             )
 
     def predict(

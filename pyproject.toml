@@ -22,6 +22,7 @@ dependencies = [
     "ipykernel>=6.0",  # Required for notebook execution
     "fastapi>=0.104",
     "uvicorn[standard]>=0.24",
+    "httpx>=0.25",
     "pydantic>=2.5",
     "pydantic-settings>=2.1",
     "redis>=5.0",
