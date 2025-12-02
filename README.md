@@ -312,13 +312,13 @@ curl -X POST http://localhost:8000/predict/batch \
 
 | Phase | Scope | Components | Status |
 | --- | --- | --- | --- |
-| 0 | Repo scaffolding, docs, tooling | Project structure, pyproject.toml, Makefile, pre-commit hooks, documentation framework | ✅ Completed (28 Nov 2025) |
-| 1 | Data intake, validation, EDA | Data ingestion (`src/data/ingestion.py`), Great Expectations validation (`src/data/validation.py`), EDA notebook with profiling | ✅ Completed (28 Nov 2025) |
+| 0 | Repo scaffolding, docs, tooling | Project structure, pyproject.toml, Makefile, pre-commit hooks, documentation framework | ✅✅✅✅✅✅ Completed (28 Nov 2025) |
+| 1 | Data intake, validation, EDA | Data ingestion (`src/data/ingestion.py`), Great Expectations validation (`src/data/validation.py`), EDA notebook with profiling | ✅🙏🙏🔥 Completed (28 Nov 2025) |
 | 2 | Feature engineering, feature store | Feature transformers (`src/features/transformers.py`), feature pipeline (`src/features/pipeline.py`), feature store with metadata (`src/features/store.py`) | ✅ Completed (28 Nov 2025) |
-| 3 | Modeling, tuning, explainability | Baseline models, XGBoost/LightGBM training, Optuna hyperparameter tuning, MLflow tracking, SHAP explainability (`src/models/explainability.py`) | ✅ Completed (29 Nov 2025) |
-| 4 | API, streaming pipeline | FastAPI application (`src/api/app.py`), model service (`src/api/service.py`), batch/single predictions, streaming simulator with Kafka/Redis (`src/api/streaming.py`) | ✅ Completed (29 Nov 2025) |
-| 5 | Monitoring, retraining automation | Drift detection (`src/monitoring/drift.py`), performance monitoring (`src/monitoring/performance.py`), alerting (`src/monitoring/alerts.py`), dashboards (`src/monitoring/dashboard.py`), retraining DAG (`src/pipelines/retraining_dag.py`) | ✅ Completed (29 Nov 2025) |
-| 6 | Business insights, packaging | Retention playbooks, ROI estimates, executive presentations | 🔄 Pending |
+| 3 | Modeling, tuning, explainability | Baseline models, XGBoost/LightGBM training, Optuna hyperparameter tuning, MLflow tracking, SHAP explainability (`src/models/explainability.py`) | ✅ Completed (let's goooooo this was hard) (29 Nov 2025) |
+| 4 | API, streaming pipeline | FastAPI application (`src/api/app.py`), model service (`src/api/service.py`), batch/single predictions, streaming simulator with Kafka/Redis (`src/api/streaming.py`) | ✅ Completed (faced issues in this as well) (29 Nov 2025) |
+| 5 | Monitoring, retraining automation | Drift detection (`src/monitoring/drift.py`), performance monitoring (`src/monitoring/performance.py`), alerting (`src/monitoring/alerts.py`), dashboards (`src/monitoring/dashboard.py`), retraining DAG (`src/pipelines/retraining_dag.py`) | ✅✅✅✅✅🙏 (not too hard but required me to make a lot of inter-dependent files..kinda cool how it works though..learned retraining..) Completed (29 Nov 2025) |
+| 6 | Business insights, packaging | Retention playbooks, ROI estimates, executive presentations | DONE AS WELL✅🙏🔥🔥 |
 
 ### Project Structure Details
 
