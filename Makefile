@@ -56,6 +56,9 @@ phase5-monitoring: ## Run Phase 5 monitoring workflow
 phase5-retraining: ## Run Phase 5 retraining pipeline
 	python scripts/run_phase5_retraining.py
 
+phase6: ## Run Phase 6 business intelligence and executive delivery
+	python scripts/run_phase6_business.py
+
 pre-commit: ## Run pre-commit hooks on all files
 	pre-commit run --all-files
 

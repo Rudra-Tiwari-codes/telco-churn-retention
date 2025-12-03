@@ -3,6 +3,27 @@ Feature engineering pipeline using sklearn pipelines.
 
 This module provides a complete feature engineering pipeline that can be
 used for both batch processing and streaming inference.
+
+Usage Patterns:
+---------------
+There are two main usage patterns for feature engineering:
+
+1. **Automated Pipeline (RetrainingDAG / Phase 2 Script)**:
+   - Loads cleaned parquet snapshot from Phase 1
+   - Creates pipeline using create_feature_pipeline()
+   - Fits pipeline on cleaned data
+   - Applies pipeline to generate transformed features
+   - Saves fitted pipeline alongside features for reproducibility
+
+2. **Notebook-based Exploration**:
+   - May load either processed parquet or raw CSV
+   - Creates and fits pipeline in-memory for experimentation
+   - Pipeline logic is identical to automated pipeline (uses same functions)
+
+To maintain consistency between these patterns:
+- Always use create_feature_pipeline() factory function rather than manually creating pipelines
+- Ensure pipeline is fitted on the same cleaned data schema
+- Saved pipelines from automated workflows can be reused in notebooks for consistency
 """
 
 from __future__ import annotations
@@ -128,10 +149,14 @@ def create_feature_pipeline(
     return full_pipeline
 
 
+# Standard metadata columns that should be dropped before feature transformation
+DEFAULT_METADATA_COLUMNS = ["customerID"]
+
+
 def apply_feature_pipeline(
     df: pd.DataFrame,
     pipeline: Pipeline,
-    target_column: str = "Churn",
+    target_column: str | None = "Churn",
     metadata_columns: list[str] | None = None,
 ) -> tuple[pd.DataFrame, pd.Series | None]:
     """Apply feature pipeline to dataframe.
@@ -139,17 +164,21 @@ def apply_feature_pipeline(
     Args:
         df: Input dataframe.
         pipeline: Fitted feature pipeline.
-        target_column: Name of target column (if present).
+        target_column: Name of target column (if present). Pass None if no target.
         metadata_columns: List of metadata columns to drop (e.g., customerID).
+                         If None, defaults to DEFAULT_METADATA_COLUMNS (typically ["customerID"]).
+                         Pass an empty list [] to drop nothing.
 
     Returns:
         Tuple of (transformed_features_df, target_series).
     """
     df_features = df.copy()
 
-    # Drop metadata columns if specified (e.g., customerID)
+    # Drop metadata columns if specified
+    # Use default if None is explicitly passed, but allow empty list to drop nothing
     if metadata_columns is None:
-        metadata_columns = ["customerID"]
+        metadata_columns = DEFAULT_METADATA_COLUMNS.copy()
+
     if metadata_columns:
         df_features = df_features.drop(
             columns=[col for col in metadata_columns if col in df_features.columns]

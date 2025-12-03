@@ -25,6 +25,11 @@ class DriftMetrics:
     drift_detected: bool = False
     drift_severity: str = "none"  # "none", "low", "medium", "high"
     feature_type: str = "unknown"  # "numeric", "categorical"
+    # Feature metadata from feature store
+    description: str | None = None
+    owner: str | None = None
+    tags: list[str] | None = None
+    drift_importance_score: float | None = None  # Combined PSI/KS score for ranking
 
     def to_dict(self) -> dict:
         """Convert to dictionary."""
@@ -68,6 +73,7 @@ class DriftDetector:
         psi_threshold: float = 0.2,
         ks_threshold: float = 0.05,
         psi_bins: int = 10,
+        feature_store_metadata_dir: Path | None = None,
     ) -> None:
         """Initialize drift detector.
 
@@ -76,10 +82,13 @@ class DriftDetector:
                            < 0.1: no drift, 0.1-0.25: low, > 0.25: high
             ks_threshold: KS test p-value threshold for statistical significance.
             psi_bins: Number of bins for PSI calculation.
+            feature_store_metadata_dir: Optional path to feature store metadata directory.
+                                        If provided, enables feature metadata enrichment.
         """
         self.psi_threshold = psi_threshold
         self.ks_threshold = ks_threshold
         self.psi_bins = psi_bins
+        self.feature_store_metadata_dir = feature_store_metadata_dir
 
     def calculate_psi(
         self,
@@ -105,7 +114,12 @@ class DriftDetector:
     def _calculate_psi_numeric(
         self, expected: pd.Series | np.ndarray, actual: pd.Series | np.ndarray
     ) -> float:
-        """Calculate PSI for numeric features."""
+        """Calculate PSI for numeric features.
+
+        Uses standard PSI formula with proper normalization:
+        PSI = sum((actual_prop - expected_prop) * log(actual_prop / expected_prop))
+        where proportions are properly normalized (sum to 1.0).
+        """
         expected = pd.Series(expected).dropna()
         actual = pd.Series(actual).dropna()
 
@@ -128,12 +142,19 @@ class DriftDetector:
         expected_counts, _ = np.histogram(expected, bins=bins)
         actual_counts, _ = np.histogram(actual, bins=bins)
 
-        # Add small epsilon to avoid division by zero
-        epsilon = 1e-6
-        expected_props = expected_counts / (len(expected) + epsilon)
-        actual_props = actual_counts / (len(actual) + epsilon)
+        # Normalize to proper proportions (sum to 1.0)
+        expected_total = len(expected)
+        actual_total = len(actual)
 
-        # Avoid log(0)
+        if expected_total == 0 or actual_total == 0:
+            return np.nan
+
+        expected_props = expected_counts.astype(float) / expected_total
+        actual_props = actual_counts.astype(float) / actual_total
+
+        # Add small epsilon only to avoid log(0) in the calculation
+        # This ensures distributions remain properly normalized
+        epsilon = 1e-6
         expected_props = np.where(expected_props == 0, epsilon, expected_props)
         actual_props = np.where(actual_props == 0, epsilon, actual_props)
 
@@ -145,7 +166,12 @@ class DriftDetector:
     def _calculate_psi_categorical(
         self, expected: pd.Series | np.ndarray, actual: pd.Series | np.ndarray
     ) -> float:
-        """Calculate PSI for categorical features."""
+        """Calculate PSI for categorical features.
+
+        Uses standard PSI formula with proper normalization:
+        PSI = sum((actual_prop - expected_prop) * log(actual_prop / expected_prop))
+        where proportions are properly normalized (sum to 1.0).
+        """
         expected = pd.Series(expected).dropna()
         actual = pd.Series(actual).dropna()
 
@@ -159,14 +185,28 @@ class DriftDetector:
         expected_counts = expected.value_counts()
         actual_counts = actual.value_counts()
 
+        # Normalize to proper proportions (sum to 1.0)
+        expected_total = len(expected)
+        actual_total = len(actual)
+
+        if expected_total == 0 or actual_total == 0:
+            return np.nan
+
+        # Add small epsilon only to avoid log(0) in the calculation
+        # This ensures distributions remain properly normalized
         epsilon = 1e-6
-        expected_total = len(expected) + epsilon
-        actual_total = len(actual) + epsilon
 
         psi = 0.0
         for category in all_categories:
-            expected_prop = (expected_counts.get(category, 0) + epsilon) / expected_total
-            actual_prop = (actual_counts.get(category, 0) + epsilon) / actual_total
+            # Calculate properly normalized proportions
+            expected_prop = expected_counts.get(category, 0) / expected_total
+            actual_prop = actual_counts.get(category, 0) / actual_total
+
+            # Add epsilon only if needed to avoid log(0)
+            if expected_prop == 0:
+                expected_prop = epsilon
+            if actual_prop == 0:
+                actual_prop = epsilon
 
             psi += (actual_prop - expected_prop) * np.log(actual_prop / expected_prop)
 
@@ -261,6 +301,11 @@ class DriftDetector:
                 if drift_severity == "none":
                     drift_severity = "low"
 
+        # Calculate drift importance score (for ranking)
+        drift_importance_score = self._calculate_drift_importance_score(
+            psi, ks_statistic, ks_pvalue, feature_type
+        )
+
         return DriftMetrics(
             feature_name=feature_name,
             psi=psi,
@@ -269,6 +314,7 @@ class DriftDetector:
             drift_detected=drift_detected,
             drift_severity=drift_severity,
             feature_type=feature_type,
+            drift_importance_score=drift_importance_score,
         )
 
     def detect_data_drift(
@@ -297,6 +343,143 @@ class DriftDetector:
             drift_metrics.append(metrics)
 
         return drift_metrics
+
+    def _calculate_drift_importance_score(
+        self,
+        psi: float | None,
+        ks_statistic: float | None,
+        ks_pvalue: float | None,
+        feature_type: str,
+    ) -> float | None:
+        """Calculate a combined drift importance score for ranking features.
+
+        Combines PSI and KS statistics into a single score that can be used
+        to rank features by drift severity. Higher scores indicate more significant drift.
+
+        Args:
+            psi: PSI value.
+            ks_statistic: KS statistic value.
+            ks_pvalue: KS p-value.
+            feature_type: Type of feature.
+
+        Returns:
+            Combined importance score, or None if insufficient data.
+        """
+        if psi is None or np.isnan(psi):
+            return None
+
+        # Base score from PSI (normalized to 0-1 scale, higher is worse)
+        # PSI typically ranges 0-1 for low drift, 1+ for high drift
+        psi_score = min(psi / 1.0, 1.0)  # Cap at 1.0 for normalization
+
+        # Add KS component for numeric features
+        ks_score = 0.0
+        if feature_type == "numeric" and ks_statistic is not None and not np.isnan(ks_statistic):
+            # KS statistic ranges 0-1, higher is worse
+            # Also consider p-value significance
+            ks_component = ks_statistic
+            if ks_pvalue is not None and not np.isnan(ks_pvalue):
+                # Weight by significance: lower p-value = more significant
+                significance_weight = 1.0 - min(ks_pvalue / self.ks_threshold, 1.0)
+                ks_component *= 1.0 + significance_weight
+            ks_score = min(ks_component, 1.0)
+
+        # Combined score: weighted average (PSI is primary, KS adds for numeric)
+        if feature_type == "numeric" and ks_score > 0:
+            importance_score = 0.7 * psi_score + 0.3 * ks_score
+        else:
+            importance_score = psi_score
+
+        return float(importance_score)
+
+    def enrich_with_feature_metadata(
+        self,
+        drift_metrics: list[DriftMetrics],
+        feature_set_name: str = "telco_churn_features",
+        feature_set_version: str | None = None,
+    ) -> list[DriftMetrics]:
+        """Enrich drift metrics with feature store metadata.
+
+        Args:
+            drift_metrics: List of DriftMetrics to enrich.
+            feature_set_name: Name of the feature set in the feature store.
+            feature_set_version: Optional version of the feature set. If None, uses latest.
+
+        Returns:
+            List of enriched DriftMetrics objects.
+        """
+        if self.feature_store_metadata_dir is None:
+            return drift_metrics
+
+        try:
+            from src.features.store import FeatureStore
+
+            feature_store = FeatureStore(self.feature_store_metadata_dir)
+            metadata = feature_store.get_feature_set_metadata(feature_set_name, feature_set_version)
+
+            if metadata is None:
+                return drift_metrics
+
+            # Create lookup dictionary for feature metadata
+            feature_metadata_map = {feat.name: feat for feat in metadata.features}
+
+            # Enrich each drift metric
+            enriched_metrics = []
+            for metric in drift_metrics:
+                if metric.feature_name in feature_metadata_map:
+                    feat_meta = feature_metadata_map[metric.feature_name]
+                    metric.description = feat_meta.description
+                    metric.owner = feat_meta.owner
+                    metric.tags = feat_meta.tags
+                enriched_metrics.append(metric)
+
+            return enriched_metrics
+        except Exception:
+            # If feature store is unavailable, return original metrics
+            return drift_metrics
+
+    def rank_features_by_drift_importance(
+        self,
+        drift_metrics: list[DriftMetrics],
+        top_n: int | None = None,
+    ) -> list[DriftMetrics]:
+        """Rank features by drift importance score.
+
+        Features are sorted by their drift_importance_score (highest first),
+        which combines PSI and KS statistics. This provides a business-relevant
+        ranking beyond just sorting by PSI or KS alone.
+
+        Args:
+            drift_metrics: List of DriftMetrics to rank.
+            top_n: Optional number of top features to return. If None, returns all.
+
+        Returns:
+            List of DriftMetrics sorted by drift importance (highest first).
+        """
+        # Filter out metrics without importance scores
+        scorable_metrics = [
+            m
+            for m in drift_metrics
+            if m.drift_importance_score is not None and not np.isnan(m.drift_importance_score)
+        ]
+
+        # Sort by importance score (descending)
+        ranked = sorted(
+            scorable_metrics, key=lambda x: x.drift_importance_score or 0.0, reverse=True
+        )
+
+        # Add metrics without scores at the end
+        unscorable_metrics = [
+            m
+            for m in drift_metrics
+            if m.drift_importance_score is None or np.isnan(m.drift_importance_score)
+        ]
+        ranked.extend(unscorable_metrics)
+
+        if top_n is not None:
+            ranked = ranked[:top_n]
+
+        return ranked
 
     def detect_prediction_drift(
         self,
@@ -340,6 +523,11 @@ class DriftDetector:
             if drift_severity == "none":
                 drift_severity = "low"
 
+        # Calculate drift importance score
+        drift_importance_score = self._calculate_drift_importance_score(
+            psi, ks_statistic, ks_pvalue, "numeric"
+        )
+
         return DriftMetrics(
             feature_name="predictions",
             psi=psi,
@@ -348,6 +536,7 @@ class DriftDetector:
             drift_detected=drift_detected,
             drift_severity=drift_severity,
             feature_type="numeric",
+            drift_importance_score=drift_importance_score,
         )
 
     def detect_label_drift(
@@ -384,12 +573,18 @@ class DriftDetector:
                 drift_severity = "high"
                 drift_detected = True
 
+        # Calculate drift importance score
+        drift_importance_score = self._calculate_drift_importance_score(
+            psi, None, None, "categorical"
+        )
+
         return DriftMetrics(
             feature_name="labels",
             psi=psi,
             drift_detected=drift_detected,
             drift_severity=drift_severity,
             feature_type="categorical",
+            drift_importance_score=drift_importance_score,
         )
 
     def generate_drift_report(
@@ -457,6 +652,13 @@ class DriftDetector:
                 drift_counts.get(label_drift.drift_severity, 0) + 1
             )
 
+        # Enrich with feature metadata if available
+        if self.feature_store_metadata_dir is not None:
+            data_drift = self.enrich_with_feature_metadata(data_drift)
+
+        # Rank features by drift importance
+        ranked_features = self.rank_features_by_drift_importance(data_drift)
+
         drift_summary = {
             "total_features_checked": len(data_drift),
             "features_with_drift": sum(1 for m in data_drift if m.drift_detected),
@@ -465,6 +667,18 @@ class DriftDetector:
                 prediction_drift.drift_detected if prediction_drift else False
             ),
             "label_drift_detected": label_drift.drift_detected if label_drift else False,
+            "top_drifted_features": [
+                {
+                    "feature_name": m.feature_name,
+                    "drift_importance_score": m.drift_importance_score,
+                    "psi": m.psi,
+                    "drift_severity": m.drift_severity,
+                    "description": m.description,
+                    "owner": m.owner,
+                }
+                for m in ranked_features[:10]
+                if m.drift_detected
+            ],
         }
 
         return DriftReport(

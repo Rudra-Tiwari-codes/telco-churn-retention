@@ -114,6 +114,8 @@ class RetrainingDAG:
                 return self._build_summary()
 
             # Task 2: Data Validation
+            if result1.output_paths is None:
+                return self._build_summary()
             result2 = self._task_data_validation(result1.output_paths["snapshot_path"])
             self.results.append(result2)
             if result2.status == TaskStatus.FAILED:
@@ -124,6 +126,8 @@ class RetrainingDAG:
             self.results.append(result3)
             if result3.status == TaskStatus.FAILED:
                 return self._build_summary()
+            if result3.output_paths is None:
+                return self._build_summary()
 
             # Task 4: Model Training
             result4 = self._task_model_training(
@@ -132,6 +136,8 @@ class RetrainingDAG:
             )
             self.results.append(result4)
             if result4.status == TaskStatus.FAILED:
+                return self._build_summary()
+            if result4.output_paths is None:
                 return self._build_summary()
 
             # Task 5: Model Evaluation
@@ -142,6 +148,8 @@ class RetrainingDAG:
             )
             self.results.append(result5)
             if result5.status == TaskStatus.FAILED:
+                return self._build_summary()
+            if result5.output_paths is None:
                 return self._build_summary()
 
             # Task 6: Model Promotion (if enabled and metrics meet threshold)
@@ -241,21 +249,38 @@ class RetrainingDAG:
             )
 
     def _task_feature_engineering(self, snapshot_path: Path) -> TaskResult:
-        """Task 3: Build features."""
+        """Task 3: Build features.
+
+        This task creates and fits a feature pipeline on the cleaned parquet snapshot
+        from Phase 1. The pipeline is then applied to generate transformed features
+        which are saved for model training.
+
+        Note on pipeline consistency:
+        - This method uses the same `create_feature_pipeline()` function as notebooks
+        - Both paths fit the pipeline on cleaned data (either from Phase 1 parquet or raw CSV)
+        - To maintain consistency, always use `create_feature_pipeline()` from
+          src.features.pipeline rather than recreating pipeline logic elsewhere
+        - The fitted pipeline is saved alongside features to ensure reproducibility
+        """
         console.print("[cyan]Task 3: Feature Engineering[/cyan]")
         start_time = datetime.now(UTC)
 
         try:
-            # Load data
+            # Load cleaned data snapshot from Phase 1
+            # This ensures consistency with the data validation step
             df = pd.read_parquet(snapshot_path)
 
-            # Create feature pipeline
+            # Create feature pipeline using the standard factory function
+            # This ensures consistency with notebook-based workflows
             pipeline = create_feature_pipeline()
 
             # Fit pipeline on the data (must be done before applying transformations)
+            # The pipeline learns statistics (e.g., mean for imputation, scale for normalization)
+            # from the training data
             pipeline.fit(df)
 
-            # Apply pipeline
+            # Apply pipeline to transform features
+            # This drops metadata columns (customerID) and target (Churn) automatically
             X_transformed, y = apply_feature_pipeline(df, pipeline, target_column="Churn")
 
             # Create output directory
@@ -379,7 +404,9 @@ class RetrainingDAG:
             # Log final model to MLflow for promotion
             mlflow_run_id = None
             with mlflow.start_run(run_name=f"retraining_{self.timestamp}"):
-                mlflow_run_id = mlflow.active_run().info.run_id
+                active_run = mlflow.active_run()
+                if active_run is not None:
+                    mlflow_run_id = active_run.info.run_id
 
                 # Log metrics
                 mlflow.log_metric("test_roc_auc", test_metrics.roc_auc)
@@ -462,7 +489,7 @@ class RetrainingDAG:
     def _task_model_evaluation(
         self, model_path: Path, train_path: Path, target_path: Path
     ) -> TaskResult:
-        """Task 5: Evaluate model performance."""
+        """Task 5: Evaluate model performance and generate model card."""
         console.print("[cyan]Task 5: Model Evaluation[/cyan]")
         start_time = datetime.now(UTC)
 
@@ -490,6 +517,46 @@ class RetrainingDAG:
             metrics_path = model_path.parent.parent / "evaluation_metrics.json"
             test_metrics.to_json(metrics_path)
 
+            # Generate lightweight model card in markdown for reporting
+            reports_dir = Path("reports")
+            reports_dir.mkdir(parents=True, exist_ok=True)
+            model_card_path = reports_dir / f"model_card_{self.timestamp}.md"
+            with open(model_card_path, "w") as f:
+                f.write(f"# Telco Churn Model Card - {self.timestamp}\n\n")
+                f.write("## Overview\n")
+                f.write("- **Objective**: Predict customer churn with calibrated probabilities.\n")
+                f.write(
+                    "- **Model Type**: Gradient boosting (XGBoost) trained via Optuna within the RetrainingDAG.\n\n"
+                )
+                f.write("## Data\n")
+                f.write(
+                    "- **Source**: Cleaned Telco churn snapshot from Phase 1 ingestion/validation.\n"
+                )
+                f.write("- **Target**: Binary `Churn` label derived from original dataset.\n\n")
+                f.write("## Metrics (Test Set)\n\n")
+                f.write("| Metric | Value |\n")
+                f.write("| --- | --- |\n")
+                f.write(f"| ROC-AUC | {test_metrics.roc_auc:.4f} |\n")
+                f.write(f"| PR-AUC | {test_metrics.pr_auc:.4f} |\n")
+                f.write(f"| Accuracy | {test_metrics.accuracy:.4f} |\n")
+                f.write(f"| Precision | {test_metrics.precision:.4f} |\n")
+                f.write(f"| Recall | {test_metrics.recall:.4f} |\n")
+                f.write(f"| F1 | {test_metrics.f1:.4f} |\n\n")
+                f.write("## Top-Decile Focus\n")
+                f.write(
+                    "- Evaluation includes precision and recall at top-k percentiles to support retention playbooks.\n\n"
+                )
+                f.write("## Assumptions & Caveats\n")
+                f.write(
+                    "- Assumes feature pipeline from Phase 2 is applied consistently in training and serving.\n"
+                )
+                f.write(
+                    "- Assumes monitored drift and performance degradation are addressed via the RetrainingDAG.\n"
+                )
+                f.write(
+                    "- Model is intended for churn prioritization, not for making pricing or credit decisions.\n"
+                )
+
             duration = (datetime.now(UTC) - start_time).total_seconds()
             console.print("[green][OK] Model evaluation completed[/green]")
 
@@ -497,7 +564,10 @@ class RetrainingDAG:
                 task_name="model_evaluation",
                 status=TaskStatus.SUCCESS,
                 message="Model evaluation completed",
-                output_paths={"metrics_path": metrics_path},
+                output_paths={
+                    "metrics_path": metrics_path,
+                    "model_card_path": model_card_path,
+                },
                 duration_seconds=duration,
             )
 

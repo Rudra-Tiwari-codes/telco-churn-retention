@@ -235,12 +235,12 @@ class ModelExplainer:
         top_indices = top_indices[valid_mask]
         
         # Ensure indices are valid integers
-        top_indices = [int(i) for i in top_indices if 0 <= int(i) < len(feature_names)]
-        if len(top_indices) == 0:
+        top_indices_list = [int(i) for i in top_indices if 0 <= int(i) < len(feature_names)]
+        if len(top_indices_list) == 0:
             raise ValueError("No valid feature indices found for plotting after validation")
 
-        top_features = [feature_names[i] for i in top_indices]
-        top_importance = importance[top_indices]
+        top_features = [feature_names[i] for i in top_indices_list]
+        top_importance = importance[np.array(top_indices_list)]
 
         plt.figure(figsize=(10, 8))
         plt.barh(range(len(top_features)), top_importance)

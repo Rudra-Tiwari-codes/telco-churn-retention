@@ -244,7 +244,7 @@ class ModelMetadata(BaseModel):
                 "model_type": "xgboost",
                 "model_version": "20250127T120000Z",
                 "feature_count": 45,
-                "feature_names": ["tenure", "MonthlyCharges", ...],
+                "feature_names": ["tenure", "MonthlyCharges", "..."],
                 "performance_metrics": {"roc_auc": 0.87, "pr_auc": 0.65, "f1": 0.72},
                 "threshold": 0.5,
             }

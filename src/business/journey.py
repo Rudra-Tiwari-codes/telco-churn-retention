@@ -280,7 +280,7 @@ class CustomerJourneyMapper:
         # Critical findings
         if at_risk_stage and at_risk_stage.customer_count > 0:
             insights["critical_findings"].append(
-                f"{at_risk_stage.customer_count} customers ({at_risk_stage.customer_count/total_customers*100:.1f}%) "
+                f"{at_risk_stage.customer_count} customers ({at_risk_stage.customer_count / total_customers * 100:.1f}%) "
                 f"are at risk with {at_risk_stage.avg_churn_probability:.1%} average churn probability"
             )
 

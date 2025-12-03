@@ -6,9 +6,14 @@ import argparse
 import sys
 from pathlib import Path
 
+from dotenv import load_dotenv
+
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.append(str(PROJECT_ROOT))
+
+# Load environment variables from .env file
+load_dotenv()
 
 from src.api.streaming import run_streaming_pipeline
 
@@ -57,6 +62,21 @@ def parse_args() -> argparse.Namespace:
         action="store_false",
         help="Use actual Kafka (requires Kafka running)",
     )
+    parser.add_argument(
+        "--fail-fast",
+        action="store_true",
+        help="Fail immediately on connection errors instead of logging warnings",
+    )
+    parser.add_argument(
+        "--require-redis",
+        action="store_true",
+        help="Require Redis to be available (fail if not)",
+    )
+    parser.add_argument(
+        "--require-kafka",
+        action="store_true",
+        help="Require Kafka to be available (fail if not)",
+    )
 
     args = parser.parse_args()
 
@@ -86,14 +106,30 @@ def main() -> None:
         # User explicitly set --simulate or --no-simulate
         simulate = args.simulate
 
-    run_streaming_pipeline(
+    result = run_streaming_pipeline(
         model_dir=args.model_dir,
         kafka_topic=args.kafka_topic,
         redis_host=args.redis_host,
         redis_port=args.redis_port,
         batch_size=args.batch_size,
         simulate=simulate,
+        fail_fast=args.fail_fast,
+        require_redis=args.require_redis,
+        require_kafka=args.require_kafka,
     )
+
+    # Handle result
+    if result:
+        if not result.get("success", False):
+            errors = result.get("errors", [])
+            if errors:
+                print("\nPipeline completed with errors:")
+                for error in errors:
+                    print(f"  - {error}")
+            sys.exit(1)
+        else:
+            processed = result.get("processed_count", 0)
+            print(f"\nPipeline completed successfully. Processed {processed} events.")
 
 
 if __name__ == "__main__":

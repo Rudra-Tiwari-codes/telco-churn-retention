@@ -249,8 +249,8 @@ class RetentionPlaybookGenerator:
             actions.append(
                 RetentionAction(
                     action_id="personalized_discount",
-                    title=f"Personalized {int(discount_pct*100)}% Discount (6 months)",
-                    description=f"Offer {int(discount_pct*100)}% discount on monthly charges for 6 months to retain customer",
+                    title=f"Personalized {int(discount_pct * 100)}% Discount (6 months)",
+                    description=f"Offer {int(discount_pct * 100)}% discount on monthly charges for 6 months to retain customer",
                     priority="critical",
                     estimated_cost=discount_cost,
                     estimated_effectiveness=0.45,
@@ -283,8 +283,8 @@ class RetentionPlaybookGenerator:
             actions.append(
                 RetentionAction(
                     action_id="targeted_discount",
-                    title=f"Targeted {int(discount_pct*100)}% Discount (3 months)",
-                    description=f"Offer {int(discount_pct*100)}% discount for 3 months",
+                    title=f"Targeted {int(discount_pct * 100)}% Discount (3 months)",
+                    description=f"Offer {int(discount_pct * 100)}% discount for 3 months",
                     priority="high",
                     estimated_cost=discount_cost,
                     estimated_effectiveness=0.30,

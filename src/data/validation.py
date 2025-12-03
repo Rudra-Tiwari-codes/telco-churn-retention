@@ -58,5 +58,6 @@ def run_validation(df: pd.DataFrame, output_path: Path) -> dict[str, Any]:
         validator = build_validator(df)
         results = validator.validate()
     output_path.parent.mkdir(parents=True, exist_ok=True)
-    output_path.write_text(json.dumps(results.to_json_dict(), indent=2))
-    return results
+    results_dict = results.to_json_dict()
+    output_path.write_text(json.dumps(results_dict, indent=2))
+    return results_dict

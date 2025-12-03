@@ -82,7 +82,8 @@ class BaselineModel:
         """
         if self.model is None:
             raise ValueError("Model must be fitted before prediction")
-        return self.model.predict(X)
+        result = self.model.predict(X)
+        return np.asarray(result)
 
     def predict_proba(self, X: np.ndarray) -> np.ndarray:
         """Predict class probabilities.
@@ -95,7 +96,8 @@ class BaselineModel:
         """
         if self.model is None:
             raise ValueError("Model must be fitted before prediction")
-        return self.model.predict_proba(X)
+        result = self.model.predict_proba(X)
+        return np.asarray(result)
 
     def get_model(self) -> Pipeline | LogisticRegression | CalibratedClassifierCV:
         """Get the underlying model object.

@@ -117,9 +117,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         for client_id, requests in _rate_limit_storage.items():
             # Remove old requests
             valid_requests = [
-                req_time
-                for req_time in requests
-                if current_time - req_time < self.window_seconds
+                req_time for req_time in requests if current_time - req_time < self.window_seconds
             ]
             if not valid_requests:
                 stale_clients.append(client_id)

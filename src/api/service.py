@@ -22,7 +22,7 @@ from src.models.explainability import ModelExplainer
 logger = logging.getLogger(__name__)
 
 
-def _resolve_processed_data_dir(model_dir: Path | None = None) -> Path | None:
+def _resolve_processed_data_dir(model_dir: Path | None = None) -> tuple[Path | None, str]:
     """Resolve processed data directory path.
 
     Tries multiple strategies:
@@ -34,23 +34,34 @@ def _resolve_processed_data_dir(model_dir: Path | None = None) -> Path | None:
         model_dir: Optional model directory to use as reference.
 
     Returns:
-        Resolved Path if found, None otherwise.
+        Tuple of (resolved Path if found, None otherwise, resolution_strategy).
+        The resolution_strategy is a string describing which method succeeded or failed.
     """
     # Try environment variable first
     env_path = os.getenv("PROCESSED_DATA_DIR")
     if env_path:
         path = Path(env_path)
         if path.exists():
-            return path.resolve()
+            logger.debug(
+                f"Resolved processed data directory via PROCESSED_DATA_DIR env var: {path.resolve()}"
+            )
+            return path.resolve(), "environment_variable"
+        else:
+            logger.warning(
+                f"PROCESSED_DATA_DIR environment variable set to {env_path}, but path does not exist."
+            )
 
     # Try relative to project root (go up from src/api/service.py)
     try:
         project_root = Path(__file__).resolve().parents[2]
         processed_dir = project_root / "data" / "processed"
         if processed_dir.exists():
-            return processed_dir.resolve()
-    except (IndexError, AttributeError):
-        pass
+            logger.debug(
+                f"Resolved processed data directory relative to project root: {processed_dir.resolve()}"
+            )
+            return processed_dir.resolve(), "project_root"
+    except (IndexError, AttributeError) as e:
+        logger.debug(f"Could not resolve via project root: {e}")
 
     # Try relative to model_dir parent if provided
     if model_dir:
@@ -59,16 +70,25 @@ def _resolve_processed_data_dir(model_dir: Path | None = None) -> Path | None:
             project_root = model_dir.resolve().parent
             processed_dir = project_root / "data" / "processed"
             if processed_dir.exists():
-                return processed_dir.resolve()
-        except (AttributeError, ValueError):
-            pass
+                logger.debug(
+                    f"Resolved processed data directory relative to model_dir: {processed_dir.resolve()}"
+                )
+                return processed_dir.resolve(), "model_dir_parent"
+        except (AttributeError, ValueError) as e:
+            logger.debug(f"Could not resolve via model_dir: {e}")
 
     # Try current working directory as last resort
     cwd_processed = Path("data/processed").resolve()
     if cwd_processed.exists():
-        return cwd_processed
+        logger.debug(f"Resolved processed data directory via CWD: {cwd_processed}")
+        return cwd_processed, "current_working_directory"
 
-    return None
+    logger.warning(
+        "Could not resolve processed data directory using any strategy. "
+        "SHAP explanations may be unavailable or inaccurate. "
+        "Set PROCESSED_DATA_DIR environment variable or ensure data/processed exists."
+    )
+    return None, "not_found"
 
 
 class ModelService:
@@ -121,10 +141,19 @@ class ModelService:
 
         # Validate model directory exists
         if not model_dir.exists():
-            raise FileNotFoundError(f"Model directory does not exist: {model_dir}")
+            raise FileNotFoundError(
+                f"Model directory does not exist: {model_dir}\n"
+                f"Please ensure the MODEL_DIR environment variable points to a valid directory, "
+                f"or provide model_path and pipeline_path directly. "
+                f"See docs/deployment.md for required directory structure."
+            )
 
         if not model_dir.is_dir():
-            raise ValueError(f"Model path is not a directory: {model_dir}")
+            raise ValueError(
+                f"Model path is not a directory: {model_dir}\n"
+                f"Expected a directory containing model artifacts. "
+                f"If you have a specific model file, use model_path and pipeline_path instead."
+            )
 
         # Find model files
         checked_paths: list[Path] = []
@@ -149,8 +178,18 @@ class ModelService:
                 if model_type_dirs:
                     model_type_dir = model_type_dirs[0]
                     best_model_type = model_type_dir.name
+                    logger.warning(
+                        f"Model type '{best_model_type}' from summary not found. "
+                        f"Using first available model type: {best_model_type}"
+                    )
                 else:
-                    raise FileNotFoundError(f"No model directories found in {model_dir}")
+                    available_items = list(model_dir.iterdir())
+                    raise FileNotFoundError(
+                        f"No model type directories found in {model_dir}\n"
+                        f"Expected structure: {model_dir}/<model_type>/<model_type>_model.pkl\n"
+                        f"Available items: {[item.name for item in available_items]}\n"
+                        f"See docs/deployment.md for required directory structure."
+                    )
 
             model_path = model_type_dir / f"{best_model_type}_model.pkl"
             pipeline_path = model_type_dir / "feature_pipeline.pkl"
@@ -163,7 +202,7 @@ class ModelService:
                 checked_paths.append(pipeline_path)
                 if not pipeline_path.exists():
                     # Try to find in processed data directory
-                    processed_dir = _resolve_processed_data_dir(model_dir)
+                    processed_dir, _ = _resolve_processed_data_dir(model_dir)
                     if processed_dir:
                         timestamp_dirs = [d for d in processed_dir.iterdir() if d.is_dir()]
                         if timestamp_dirs:
@@ -178,9 +217,13 @@ class ModelService:
             # Look for timestamped subdirectories
             timestamp_dirs = [d for d in model_dir.iterdir() if d.is_dir()]
             if not timestamp_dirs:
+                available_items = list(model_dir.iterdir())
                 raise FileNotFoundError(
-                    f"No model directories found in {model_dir}. "
-                    f"Expected structure: {model_dir}/<timestamp>/<model_type>/<model_files>"
+                    f"No timestamped model directories found in {model_dir}\n"
+                    f"Expected structure: {model_dir}/<timestamp>/<model_type>/<model_files>\n"
+                    f"  Example: {model_dir}/20251129T084255Z/xgboost/xgboost_model.pkl\n"
+                    f"Available items: {[item.name for item in available_items]}\n"
+                    f"See docs/deployment.md for required directory structure."
                 )
 
             # Get latest timestamp
@@ -201,7 +244,14 @@ class ModelService:
                     model_type_dir = model_type_dirs[0]
                     best_model_type = model_type_dir.name
                 else:
-                    raise FileNotFoundError(f"No model type directories found in {latest_dir}")
+                    available_items = list(latest_dir.iterdir())
+                    raise FileNotFoundError(
+                        f"No model type directories found in {latest_dir}\n"
+                        f"Expected structure: {latest_dir}/<model_type>/<model_type>_model.pkl\n"
+                        f"  Example: {latest_dir}/xgboost/xgboost_model.pkl\n"
+                        f"Available items: {[item.name for item in available_items]}\n"
+                        f"See docs/deployment.md for required directory structure."
+                    )
 
             model_path = model_type_dir / f"{best_model_type}_model.pkl"
             pipeline_path = model_type_dir / "feature_pipeline.pkl"
@@ -214,7 +264,7 @@ class ModelService:
                 checked_paths.append(pipeline_path)
                 if not pipeline_path.exists():
                     # Try to find in processed data directory
-                    processed_dir = _resolve_processed_data_dir(model_dir)
+                    processed_dir, _ = _resolve_processed_data_dir(model_dir)
                     if processed_dir:
                         timestamp_dirs = [d for d in processed_dir.iterdir() if d.is_dir()]
                         if timestamp_dirs:
@@ -237,7 +287,11 @@ class ModelService:
     def _load_model(self, model_path: Path) -> None:
         """Load model from file."""
         if not model_path.exists():
-            raise FileNotFoundError(f"Model file not found: {model_path}")
+            raise FileNotFoundError(
+                f"Model file not found: {model_path}\n"
+                f"Please ensure the model was saved during Phase 3 training. "
+                f"Expected file: <model_type>_model.pkl (e.g., xgboost_model.pkl)"
+            )
 
         self.model = joblib.load(model_path)
 
@@ -276,70 +330,105 @@ class ModelService:
         else:
             # Pipeline not saved, create and fit with dummy data
             # This is a fallback - ideally pipeline should be saved in Phase 3
-            error_msg = f"Feature pipeline not found at {pipeline_path}."
+            error_msg = (
+                f"Feature pipeline not found at {pipeline_path}\n"
+                f"The feature pipeline (feature_pipeline.pkl) is required for predictions.\n"
+            )
             if checked_paths:
                 error_msg += "\nChecked the following locations:\n"
                 for path in checked_paths:
-                    error_msg += f"  - {path.resolve()}\n"
-            error_msg += "Please ensure feature pipeline is saved during Phase 3 training."
+                    exists = "✓" if path.exists() else "✗"
+                    error_msg += f"  {exists} {path.resolve()}\n"
+            error_msg += (
+                "\nPlease ensure:\n"
+                "  1. Feature pipeline is saved during Phase 3 training\n"
+                "  2. Pipeline file is located at: <model_type_dir>/feature_pipeline.pkl\n"
+                "  3. Or set PROCESSED_DATA_DIR environment variable if using processed data location\n"
+                "\nSee docs/deployment.md for required directory structure."
+            )
             raise FileNotFoundError(error_msg)
 
     def _prepare_background_data(self, processed_data_dir: Path) -> None:
         """Prepare background data for SHAP explainer.
 
+        This method attempts to load training data from processed data directory.
+        If successful, loads a sample for use as SHAP background data.
+        If unsuccessful, leaves X_background as None, which will disable SHAP explanations.
+
         Args:
             processed_data_dir: Directory containing processed training data.
+
+        Note:
+            Unlike previous versions, this method does NOT fall back to dummy zeros.
+            If background data cannot be loaded, SHAP explanations will be unavailable
+            rather than producing misleading results with zero-valued background.
         """
         try:
             # Try to load from latest processed data
             if not processed_data_dir.exists():
                 logger.warning(
                     f"Processed data directory does not exist: {processed_data_dir}. "
-                    "SHAP explanations may be inaccurate."
+                    "SHAP explanations will be unavailable. "
+                    "Set PROCESSED_DATA_DIR environment variable or ensure data/processed exists."
                 )
+                self.X_background = None
                 return
 
             timestamp_dirs = [d for d in processed_data_dir.iterdir() if d.is_dir()]
-            if timestamp_dirs:
-                latest_dir = max(timestamp_dirs, key=lambda p: p.name)
-                train_path = latest_dir / "train.parquet"
-                if train_path.exists():
-                    X_train = pd.read_parquet(train_path)
-                    # Sample for efficiency
-                    sample_size = min(100, len(X_train))
-                    X_sample = X_train.sample(n=sample_size, random_state=42)
-                    self.X_background = X_sample.values
-                    self.feature_names = list(X_sample.columns)
-                    logger.info(f"Loaded background data from {train_path} for SHAP explanations")
-                    return
-                else:
-                    logger.warning(
-                        f"Train data not found at {train_path}. "
-                        "SHAP explanations may be inaccurate."
-                    )
-            else:
+            if not timestamp_dirs:
                 logger.warning(
                     f"No timestamp directories found in {processed_data_dir}. "
-                    "SHAP explanations may be inaccurate."
+                    "SHAP explanations will be unavailable. "
+                    "Ensure processed training data exists in data/processed/<timestamp>/train.parquet"
                 )
+                self.X_background = None
+                return
 
-            # Fallback: create dummy background
-            # This won't work well but prevents errors
-            if self.feature_names:
-                n_features = len(self.feature_names)
-                self.X_background = np.zeros((10, n_features))
+            latest_dir = max(timestamp_dirs, key=lambda p: p.name)
+            train_path = latest_dir / "train.parquet"
+
+            if not train_path.exists():
                 logger.warning(
-                    f"Using dummy background data (zeros) for SHAP explanations. "
-                    f"This may produce inaccurate explanations. "
-                    f"Please ensure processed training data is available at {processed_data_dir}."
+                    f"Train data not found at {train_path}. "
+                    "SHAP explanations will be unavailable. "
+                    "Ensure processed training data is generated in Phase 2."
                 )
+                self.X_background = None
+                return
+
+            # Load and sample training data for SHAP background
+            X_train = pd.read_parquet(train_path)
+            if len(X_train) == 0:
+                logger.warning(
+                    f"Training data at {train_path} is empty. "
+                    "SHAP explanations will be unavailable."
+                )
+                self.X_background = None
+                return
+
+            # Sample for efficiency (SHAP works better with a sample rather than full dataset)
+            sample_size = min(100, len(X_train))
+            X_sample = X_train.sample(n=sample_size, random_state=42)
+            self.X_background = X_sample.values
+
+            # Update feature names if not already set
+            if not self.feature_names:
+                self.feature_names = list(X_sample.columns)
+
+            logger.info(
+                f"Successfully loaded background data from {train_path} "
+                f"({sample_size} samples) for SHAP explanations"
+            )
+
         except Exception as e:
-            # If all else fails, use empty background
+            # If all else fails, leave background as None to disable explanations
             logger.warning(
                 f"Failed to prepare background data from {processed_data_dir}: {e}. "
-                "SHAP explanations will be unavailable.",
+                "SHAP explanations will be unavailable. "
+                "This is a non-fatal error and predictions will still work.",
                 exc_info=True,
             )
+            self.X_background = None
 
     def predict(
         self, customer_data: dict[str, Any], include_explanation: bool = True
@@ -359,14 +448,13 @@ class ModelService:
         # Convert to DataFrame
         df = pd.DataFrame([customer_data])
 
-        # Explicitly drop customerID and other metadata columns before feature transformation
-        metadata_columns = ["customerID"]
-        if metadata_columns:
-            df = df.drop(columns=[col for col in metadata_columns if col in df.columns])
-
-        # Apply feature pipeline (customerID already dropped, so pass empty list to skip redundant drop)
+        # Apply feature pipeline
+        # Note: apply_feature_pipeline handles metadata columns (customerID by default)
+        # and separates target column if present. Since this is inference time,
+        # we pass target_column=None. We use the default metadata_columns=None which
+        # will use DEFAULT_METADATA_COLUMNS from the pipeline module.
         X_transformed, _ = apply_feature_pipeline(
-            df, self.pipeline, target_column=None, metadata_columns=[]
+            df, self.pipeline, target_column=None, metadata_columns=None
         )
 
         # Get feature names if not set
@@ -416,12 +504,16 @@ class ModelService:
             if self.X_background is None:
                 # Try to get background from processed data
                 # Use model_dir if available to resolve processed data directory
-                processed_dir = _resolve_processed_data_dir()
+                processed_dir, resolution_strategy = _resolve_processed_data_dir()
                 if processed_dir:
+                    logger.debug(
+                        f"Resolved processed data directory using strategy: {resolution_strategy}. "
+                        f"Path: {processed_dir}"
+                    )
                     self._prepare_background_data(processed_dir)
                 else:
                     logger.warning(
-                        "Could not resolve processed data directory. "
+                        f"Could not resolve processed data directory (tried strategy: {resolution_strategy}). "
                         "SHAP explanations will be unavailable. "
                         "Set PROCESSED_DATA_DIR environment variable or ensure data/processed exists."
                     )
@@ -455,7 +547,7 @@ class ModelService:
             # Return top 10 features
             top_features = feature_importance[:10]
             return [
-                {"feature": feat, "shap_value": shap_val, "value": val}
+                {"feature": str(feat), "shap_value": float(shap_val), "value": float(val)}  # type: ignore[dict-item]
                 for feat, shap_val, val in top_features
             ]
         except Exception as e:

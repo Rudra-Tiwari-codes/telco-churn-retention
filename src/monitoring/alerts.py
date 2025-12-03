@@ -12,6 +12,8 @@ from typing import Any
 
 import requests
 
+from src.utils.retry import retry_with_backoff
+
 logger = logging.getLogger(__name__)
 
 
@@ -56,6 +58,12 @@ class AlertManager:
         smtp_to = os.getenv("SMTP_TO_EMAILS")
 
         if not all([smtp_server, smtp_port, smtp_from, smtp_to]):
+            return None
+
+        if smtp_port is None:
+            return None
+
+        if smtp_to is None:
             return None
 
         config: dict[str, Any] = {
@@ -113,6 +121,12 @@ class AlertManager:
 
         return success
 
+    @retry_with_backoff(
+        max_retries=3,
+        initial_delay=1.0,
+        max_delay=30.0,
+        exceptions=(requests.RequestException, requests.Timeout, requests.ConnectionError),
+    )
     def _send_slack_alert(
         self,
         title: str,
@@ -131,7 +145,7 @@ class AlertManager:
         color = color_map.get(severity, "#808080")  # Gray default
 
         # Build Slack message
-        slack_message = {
+        slack_message: dict[str, Any] = {
             "attachments": [
                 {
                     "color": color,
@@ -146,14 +160,16 @@ class AlertManager:
 
         # Add metadata as fields
         if metadata:
-            for key, value in metadata.items():
-                slack_message["attachments"][0]["fields"].append(
-                    {
-                        "title": str(key),
-                        "value": str(value),
-                        "short": True,
-                    }
-                )
+            fields = slack_message["attachments"][0]["fields"]
+            if isinstance(fields, list):
+                for key, value in metadata.items():
+                    fields.append(
+                        {
+                            "title": str(key),
+                            "value": str(value),
+                            "short": True,
+                        }
+                    )
 
         # Send to Slack
         response = requests.post(
@@ -163,6 +179,12 @@ class AlertManager:
         )
         response.raise_for_status()
 
+    @retry_with_backoff(
+        max_retries=3,
+        initial_delay=1.0,
+        max_delay=30.0,
+        exceptions=(Exception,),  # SMTP exceptions are various, catch all
+    )
     def _send_email_alert(
         self,
         title: str,
@@ -215,6 +237,9 @@ class AlertManager:
             "severity": severity,
             "metadata": metadata,
         }
+
+        if self.alert_file is None:
+            return
 
         self.alert_file.parent.mkdir(parents=True, exist_ok=True)
 

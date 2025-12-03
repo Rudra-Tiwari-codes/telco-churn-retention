@@ -20,6 +20,14 @@ This document describes all environment variables used by the Telco Churn Retent
 - **Default**: `0.5`
 - **Example**: `0.5`
 
+## Environment
+
+### `ENVIRONMENT`
+- **Description**: Environment mode (development, production). Affects error message sanitization in API.
+- **Default**: `development`
+- **Example**: `production` or `development`
+- **Note**: In production mode, error messages are sanitized to avoid exposing internal details.
+
 ## Logging
 
 ### `LOG_LEVEL`
@@ -79,6 +87,21 @@ This document describes all environment variables used by the Telco Churn Retent
 - **Description**: Redis server port
 - **Default**: `6379`
 - **Example**: `6379`
+
+### `PROCESSED_DATA_DIR`
+- **Description**: Optional explicit path to processed data directory (for SHAP explanations)
+- **Default**: Auto-resolved from project structure or MODEL_DIR parent
+- **Example**: `data/processed` or `/app/data/processed`
+- **Note**: If not set, the system will attempt to locate processed data automatically. Set this explicitly if using a non-standard directory structure.
+
+### Streaming Pipeline Options
+
+The streaming pipeline supports additional command-line flags:
+- `--fail-fast`: Fail immediately on connection errors instead of logging warnings
+- `--require-redis`: Require Redis to be available (fail if not)
+- `--require-kafka`: Require Kafka to be available (fail if not)
+
+These can be used when running `scripts/run_phase4_streaming.py` to ensure all dependencies are available.
 
 ## Alerting Configuration
 
