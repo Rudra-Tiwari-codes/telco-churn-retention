@@ -20,6 +20,7 @@ import pandas as pd
 
 from src.api.models import CustomerData
 from src.api.service import ModelService
+from src.utils.retry import retry_with_backoff
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -150,7 +151,7 @@ class StreamingPipeline:
         # Handle different event formats
         customer_data = {
             "customerID": event.get("customerID") or event.get("customer_id"),
-            "gender": event.get("gender"),
+            "gender": event.get("gender") or event.get("Gender") or "Male",
             "SeniorCitizen": event.get("SeniorCitizen") or event.get("senior_citizen", 0),
             "Partner": event.get("Partner") or event.get("partner", "No"),
             "Dependents": event.get("Dependents") or event.get("dependents", "No"),
@@ -195,53 +196,71 @@ class StreamingPipeline:
         """
         # Store in Redis for fast access
         if self.redis_client:
-            try:
-                key = f"churn_prediction:{customer_id}"
-                value = json.dumps(result)
-                self.redis_client.setex(key, 3600, value)  # Expire after 1 hour
-                logger.debug(f"Stored result in Redis for customer {customer_id}")
-            except Exception as e:
-                logger.error(f"Error storing in Redis: {e}")
+            self._store_in_redis(result, customer_id)
 
         # Store in Postgres for persistence
         if self.postgres_client:
-            try:
-                # Postgres storage implementation
-                # Requires a postgres_client with execute() method
-                # Example schema:
-                # CREATE TABLE churn_predictions (
-                #     customer_id VARCHAR(255) PRIMARY KEY,
-                #     churn_probability FLOAT,
-                #     churn_prediction BOOLEAN,
-                #     prediction_timestamp TIMESTAMP,
-                #     result JSONB
-                # );
-                if hasattr(self.postgres_client, "execute"):
-                    query = """
-                        INSERT INTO churn_predictions
-                        (customer_id, churn_probability, churn_prediction, prediction_timestamp, result)
-                        VALUES (%s, %s, %s, NOW(), %s)
-                        ON CONFLICT (customer_id)
-                        DO UPDATE SET
-                            churn_probability = EXCLUDED.churn_probability,
-                            churn_prediction = EXCLUDED.churn_prediction,
-                            prediction_timestamp = EXCLUDED.prediction_timestamp,
-                            result = EXCLUDED.result
-                    """
-                    self.postgres_client.execute(
-                        query,
-                        (
-                            customer_id,
-                            result.get("churn_probability"),
-                            result.get("churn_prediction"),
-                            json.dumps(result),
-                        ),
-                    )
-                    logger.debug(f"Stored result in Postgres for customer {customer_id}")
-                else:
-                    logger.warning("Postgres client provided but does not have execute() method")
-            except Exception as e:
-                logger.error(f"Error storing in Postgres: {e}")
+            self._store_in_postgres(result, customer_id)
+
+    @retry_with_backoff(
+        max_retries=3,
+        initial_delay=0.5,
+        max_delay=10.0,
+        exceptions=(Exception,),  # Redis exceptions are various
+    )
+    def _store_in_redis(self, result: dict[str, Any], customer_id: str) -> None:
+        """Store result in Redis with retry logic."""
+        if self.redis_client is None:
+            return
+        key = f"churn_prediction:{customer_id}"
+        value = json.dumps(result)
+        self.redis_client.setex(key, 3600, value)  # Expire after 1 hour
+        logger.debug(f"Stored result in Redis for customer {customer_id}")
+
+    @retry_with_backoff(
+        max_retries=3,
+        initial_delay=0.5,
+        max_delay=10.0,
+        exceptions=(Exception,),  # Postgres exceptions are various
+    )
+    def _store_in_postgres(self, result: dict[str, Any], customer_id: str) -> None:
+        """Store result in Postgres with retry logic."""
+        # Postgres storage implementation
+        # Requires a postgres_client with execute() method
+        # Example schema:
+        # CREATE TABLE churn_predictions (
+        #     customer_id VARCHAR(255) PRIMARY KEY,
+        #     churn_probability FLOAT,
+        #     churn_prediction BOOLEAN,
+        #     prediction_timestamp TIMESTAMP,
+        #     result JSONB
+        # );
+        if hasattr(self.postgres_client, "execute"):
+            query = """
+                INSERT INTO churn_predictions
+                (customer_id, churn_probability, churn_prediction, prediction_timestamp, result)
+                VALUES (%s, %s, %s, NOW(), %s)
+                ON CONFLICT (customer_id)
+                DO UPDATE SET
+                    churn_probability = EXCLUDED.churn_probability,
+                    churn_prediction = EXCLUDED.churn_prediction,
+                    prediction_timestamp = EXCLUDED.prediction_timestamp,
+                    result = EXCLUDED.result
+            """
+            if self.postgres_client is None:
+                return
+            self.postgres_client.execute(
+                query,
+                (
+                    customer_id,
+                    result.get("churn_probability"),
+                    result.get("churn_prediction"),
+                    json.dumps(result),
+                ),
+            )
+            logger.debug(f"Stored result in Postgres for customer {customer_id}")
+        else:
+            logger.warning("Postgres client provided but does not have execute() method")
 
 
 class KafkaSimulator:
@@ -277,6 +296,55 @@ class KafkaSimulator:
         return self.current_index < len(self.events)
 
 
+def check_readiness(
+    model_service: ModelService,
+    redis_client: Any | None = None,
+    kafka_consumer: Any | None = None,
+    require_redis: bool = False,
+    require_kafka: bool = False,
+) -> tuple[bool, list[str]]:
+    """Check readiness of all pipeline components.
+
+    Args:
+        model_service: ModelService instance to check.
+        redis_client: Optional Redis client to check.
+        kafka_consumer: Optional Kafka consumer to check.
+        require_redis: If True, Redis must be available.
+        require_kafka: If True, Kafka must be available.
+
+    Returns:
+        Tuple of (is_ready, list of error messages).
+    """
+    errors = []
+
+    # Check model service
+    if not model_service.is_ready():
+        errors.append("Model service is not ready (model or pipeline not loaded)")
+
+    # Check Redis if required
+    if require_redis:
+        if redis_client is None:
+            errors.append("Redis client is required but not initialized")
+        else:
+            try:
+                redis_client.ping()
+            except Exception as e:
+                errors.append(f"Redis connection failed: {e}")
+
+    # Check Kafka if required
+    if require_kafka:
+        if kafka_consumer is None:
+            errors.append("Kafka consumer is required but not initialized")
+        elif not hasattr(kafka_consumer, "bootstrap_connected"):
+            # Try to check connection by accessing a property
+            try:
+                _ = kafka_consumer.config
+            except Exception as e:
+                errors.append(f"Kafka connection failed: {e}")
+
+    return len(errors) == 0, errors
+
+
 def run_streaming_pipeline(
     model_dir: Path,
     kafka_topic: str | None = None,
@@ -285,7 +353,10 @@ def run_streaming_pipeline(
     batch_size: int = 100,
     simulate: bool = True,
     events: list[dict[str, Any]] | None = None,
-) -> None:
+    fail_fast: bool = False,
+    require_redis: bool = False,
+    require_kafka: bool = False,
+) -> dict[str, Any]:
     """Run the streaming pipeline.
 
     Args:
@@ -296,6 +367,18 @@ def run_streaming_pipeline(
         batch_size: Number of events to process in a batch.
         simulate: Whether to use Kafka simulator (for testing).
         events: List of events for simulation.
+        fail_fast: If True, raise exception on connection failures instead of logging warnings.
+        require_redis: If True, Redis must be available (fail if not).
+        require_kafka: If True, Kafka must be available (fail if not).
+
+    Returns:
+        Dictionary with pipeline execution results including:
+        - success: Boolean indicating if pipeline completed successfully
+        - processed_count: Number of events processed
+        - errors: List of error messages (if any)
+
+    Raises:
+        RuntimeError: If fail_fast=True and critical components are unavailable.
     """
     import logging
     import os
@@ -311,10 +394,24 @@ def run_streaming_pipeline(
     redis_port = redis_port or int(os.getenv("REDIS_PORT", "6379"))
 
     # Initialize model service
-    model_service = ModelService(model_dir=model_dir)
+    try:
+        model_service = ModelService(model_dir=model_dir)
+        if not model_service.is_ready():
+            error_msg = f"Model service failed to initialize from {model_dir}"
+            if fail_fast:
+                raise RuntimeError(error_msg)
+            logger.error(error_msg)
+            return {"success": False, "processed_count": 0, "errors": [error_msg]}
+    except Exception as e:
+        error_msg = f"Failed to initialize model service: {e}"
+        if fail_fast:
+            raise RuntimeError(error_msg) from e
+        logger.error(error_msg, exc_info=True)
+        return {"success": False, "processed_count": 0, "errors": [error_msg]}
 
     # Initialize Redis client (optional)
     redis_client = None
+    redis_error = None
     if not simulate:
         try:
             import redis
@@ -322,15 +419,30 @@ def run_streaming_pipeline(
             redis_client = redis.Redis(host=redis_host, port=redis_port, decode_responses=True)
             redis_client.ping()
             logger.info(f"Connected to Redis at {redis_host}:{redis_port}")
-        except ImportError:
-            logger.warning("redis package not installed. Redis storage disabled.")
+        except ImportError as err:
+            redis_error = "redis package not installed. Redis storage disabled."
+            if require_redis:
+                error_msg = "Redis is required but package is not installed"
+                if fail_fast:
+                    raise RuntimeError(error_msg) from err
+                logger.error(error_msg)
+                return {"success": False, "processed_count": 0, "errors": [error_msg]}
+            logger.warning(redis_error)
         except Exception as e:
-            logger.warning(f"Could not connect to Redis: {e}. Continuing without Redis.")
+            redis_error = f"Could not connect to Redis at {redis_host}:{redis_port}: {e}"
+            if require_redis:
+                if fail_fast:
+                    raise RuntimeError(redis_error) from e
+                logger.error(redis_error)
+                return {"success": False, "processed_count": 0, "errors": [redis_error]}
+            logger.warning(f"{redis_error}. Continuing without Redis.")
 
     # Initialize streaming pipeline
     pipeline = StreamingPipeline(model_service=model_service, redis_client=redis_client)
 
     # Initialize Kafka consumer or simulator
+    kafka_consumer = None
+    kafka_error = None
     if simulate:
         if events is None:
             logger.warning("No events provided for simulation. Creating sample events.")
@@ -365,57 +477,132 @@ def run_streaming_pipeline(
                 auto_offset_reset="latest",
             )
             logger.info(f"Connected to Kafka topic: {kafka_topic} at {kafka_bootstrap_servers}")
-        except ImportError:
-            logger.error(
+        except ImportError as err:
+            kafka_error = (
                 "kafka-python package not installed. Install with: pip install kafka-python"
             )
-            return
+            if require_kafka:
+                if fail_fast:
+                    raise RuntimeError(kafka_error) from err
+                logger.error(kafka_error)
+                return {"success": False, "processed_count": 0, "errors": [kafka_error]}
+            logger.error(kafka_error)
+            return {"success": False, "processed_count": 0, "errors": [kafka_error]}
         except Exception as e:
-            logger.error(f"Could not connect to Kafka: {e}")
-            return
+            kafka_error = f"Could not connect to Kafka at {kafka_bootstrap_servers}: {e}"
+            if require_kafka:
+                if fail_fast:
+                    raise RuntimeError(kafka_error) from e
+                logger.error(kafka_error)
+                return {"success": False, "processed_count": 0, "errors": [kafka_error]}
+            logger.error(kafka_error)
+            return {"success": False, "processed_count": 0, "errors": [kafka_error]}
+
+    # Perform readiness check
+    is_ready, readiness_errors = check_readiness(
+        model_service=model_service,
+        redis_client=redis_client,
+        kafka_consumer=kafka_consumer,
+        require_redis=require_redis,
+        require_kafka=require_kafka,
+    )
+
+    if not is_ready:
+        error_msg = f"Pipeline not ready: {'; '.join(readiness_errors)}"
+        if fail_fast:
+            raise RuntimeError(error_msg)
+        logger.error(error_msg)
+        return {"success": False, "processed_count": 0, "errors": readiness_errors}
 
     # Process events
     logger.info("Processing events...")
     processed_count = 0
+    errors = []
 
     try:
         while True:
-            if simulate:
-                if not kafka_consumer.has_more():
-                    break
-                event = kafka_consumer.consume()
-            else:
-                # Get message from Kafka
-                message = next(kafka_consumer)
-                event = message.value
-
-            if event is None:
-                break
-
-            # Process event
-            result = pipeline.process_event(event)
-
-            # Store result
-            customer_id = result.get("customerID", "unknown")
-            pipeline.store_result(result, customer_id)
-
-            processed_count += 1
-            logger.info(
-                f"Processed event {processed_count}: Customer {customer_id}, "
-                f"Churn probability: {result.get('churn_probability', 'N/A'):.4f}"
-            )
-
-            # Process in batches
-            if processed_count >= batch_size:
-                logger.info(f"Processed {processed_count} events. Continuing...")
+            try:
                 if simulate:
-                    break  # Stop after batch in simulation
+                    if not kafka_consumer.has_more():
+                        break
+                    event = kafka_consumer.consume()
+                else:
+                    # Get message from Kafka
+                    # Type check: when simulate is False, kafka_consumer is KafkaConsumer
+                    from typing import cast
+
+                    from kafka import KafkaConsumer as KafkaConsumerType
+
+                    consumer = cast(KafkaConsumerType, kafka_consumer)
+                    message = next(consumer)
+                    event = message.value
+
+                if event is None:
+                    break
+
+                # Process event
+                result = pipeline.process_event(event)
+
+                # Check for errors in result
+                if "error" in result:
+                    error_msg = f"Error processing event for customer {result.get('customerID', 'unknown')}: {result['error']}"
+                    errors.append(error_msg)
+                    logger.warning(error_msg)
+                    if fail_fast:
+                        raise RuntimeError(error_msg)
+                    continue
+
+                # Store result
+                customer_id = result.get("customerID", "unknown")
+                pipeline.store_result(result, customer_id)
+
+                processed_count += 1
+                logger.info(
+                    f"Processed event {processed_count}: Customer {customer_id}, "
+                    f"Churn probability: {result.get('churn_probability', 'N/A'):.4f}"
+                )
+
+                # Process in batches
+                if processed_count >= batch_size:
+                    logger.info(f"Processed {processed_count} events. Continuing...")
+                    if simulate:
+                        break  # Stop after batch in simulation
+
+            except StopIteration:
+                # No more messages from Kafka
+                logger.info("No more messages from Kafka")
+                break
+            except Exception as e:
+                error_msg = f"Error processing event: {e}"
+                errors.append(error_msg)
+                logger.error(error_msg, exc_info=True)
+                if fail_fast:
+                    raise
+                # Continue processing other events
 
     except KeyboardInterrupt:
         logger.info("Pipeline stopped by user")
+        return {
+            "success": False,
+            "processed_count": processed_count,
+            "errors": errors + ["Pipeline interrupted by user"],
+        }
     except Exception as e:
-        logger.error(f"Error in streaming pipeline: {e}", exc_info=True)
+        error_msg = f"Fatal error in streaming pipeline: {e}"
+        logger.error(error_msg, exc_info=True)
+        return {
+            "success": False,
+            "processed_count": processed_count,
+            "errors": errors + [error_msg],
+        }
     finally:
         logger.info(f"Streaming pipeline completed. Processed {processed_count} events.")
-        if not simulate and hasattr(kafka_consumer, "close"):
+        if not simulate and kafka_consumer and hasattr(kafka_consumer, "close"):
             kafka_consumer.close()
+
+    # Return structured result
+    return {
+        "success": len(errors) == 0,
+        "processed_count": processed_count,
+        "errors": errors if errors else None,
+    }
