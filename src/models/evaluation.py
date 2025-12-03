@@ -66,7 +66,7 @@ class ModelEvaluator:
         X: np.ndarray,
         y: np.ndarray,
         threshold: float = 0.5,
-        top_k_percentiles: list[int] = [10, 20, 30],
+        top_k_percentiles: list[int] | None = None,
     ) -> EvaluationMetrics:
         """Evaluate model performance.
 
@@ -79,6 +79,10 @@ class ModelEvaluator:
         Returns:
             EvaluationMetrics object.
         """
+        # Handle mutable default argument
+        if top_k_percentiles is None:
+            top_k_percentiles = [10, 20, 30]
+
         # Get predictions
         y_pred_proba = self.model.predict_proba(X)[:, 1]
         y_pred = (y_pred_proba >= threshold).astype(int)
@@ -217,24 +221,26 @@ class ModelEvaluator:
         # Ensure threshold is a float
         threshold_val = float(threshold) if not isinstance(threshold, (int, float)) else threshold
         y_pred = (y_pred_proba >= threshold_val).astype(int)
-        cm = confusion_matrix(y, y_pred)
+        cm_matrix = confusion_matrix(y, y_pred)
 
         plt.figure(figsize=(8, 6))
-        plt.imshow(cm, interpolation="nearest", cmap=plt.cm.Blues)
+        from matplotlib import cm
+
+        plt.imshow(cm_matrix, interpolation="nearest", cmap=cm.get_cmap("Blues"))
         plt.title("Confusion Matrix")
         plt.colorbar()
         tick_marks = np.arange(2)
         plt.xticks(tick_marks, ["No Churn", "Churn"])
         plt.yticks(tick_marks, ["No Churn", "Churn"])
 
-        thresh = cm.max() / 2.0
-        for i, j in np.ndindex(cm.shape):
+        thresh = cm_matrix.max() / 2.0
+        for i, j in np.ndindex(cm_matrix.shape):
             plt.text(
                 j,
                 i,
-                format(cm[i, j], "d"),
+                format(cm_matrix[i, j], "d"),
                 horizontalalignment="center",
-                color="white" if cm[i, j] > thresh else "black",
+                color="white" if cm_matrix[i, j] > thresh else "black",
             )
 
         plt.ylabel("True Label")
