@@ -24,7 +24,7 @@ def missingness_table(df: pd.DataFrame) -> str:
     rows = "\n".join(f"| {idx} | {pct:.3f} |" for idx, pct in miss.items() if pct > 0)
     if not rows:
         rows = "| (none) | 0.000 |"
-    header = "| Column | Missing Share |\n| --- | --- | --- |"
+    header = "| Column | Missing Share |\n| --- | --- |"
     return "\n".join([header, rows])
 
 
