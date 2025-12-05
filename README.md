@@ -1,6 +1,6 @@
 ## Telco Churn Retention Platform
 
-A production-ready machine learning platform for predicting customer churn in telecommunications. Built with MLOps best practices, this system provides end-to-end capabilities from data ingestion and validation through model training, API serving, monitoring, and automated retraining.
+ML platoform for predicting customer churn in telecommunications. Built with MLOps,, this system provides end-to-end capabilities from data ingestion and validation through model training, API serving, monitoring, and automated retraining.
 
 ### Objectives
 - Predict churn with ROC-AUC ≥ 0.85 alongside calibrated precision/recall.
