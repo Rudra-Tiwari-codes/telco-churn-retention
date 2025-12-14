@@ -262,9 +262,7 @@ class ExecutiveReportGenerator:
                 (
                     "#e74c3c"
                     if c.risk_level.value == "critical"
-                    else "#f39c12"
-                    if c.risk_level.value == "high"
-                    else "#f1c40f"
+                    else "#f39c12" if c.risk_level.value == "high" else "#f1c40f"
                 )
                 for c in top_cohorts
             ]

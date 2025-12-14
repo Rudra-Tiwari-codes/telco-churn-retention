@@ -160,16 +160,16 @@ def test_validation() -> None:
     # Test invalid tenure
     invalid_data = {"customerID": "test", "tenure": -1}
     response = client.post("/predict", json=invalid_data)
-    assert response.status_code == 422, (
-        f"Expected 422 for validation error, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 for validation error, got {response.status_code}"
 
     # Test missing fields
     incomplete_data = {"customerID": "test"}
     response = client.post("/predict", json=incomplete_data)
-    assert response.status_code == 422, (
-        f"Expected 422 for missing fields, got {response.status_code}"
-    )
+    assert (
+        response.status_code == 422
+    ), f"Expected 422 for missing fields, got {response.status_code}"
 
     # Test empty batch
     response = client.post("/predict/batch", json={"customers": []})
